@@ -26,6 +26,30 @@ const SLOT_H = 28;
 const SLOT_RECTS = [58, 106, 154, 202].map((y) => [56, y, 115, SLOT_H]);
 const CUE_RECTS = [58, 106, 154, 202].map((y) => [16, y - 2, 32, 32]);
 
+// 음절 쓰기 보조 칸(한글 쓰기 교육 표준 — 2026-08-27 사용자 확정):
+// 칸당 22×22mm 정사각 4개(낱말 길이 무관 고정 — 음절 수 힌트 방지), 각 칸을 연한
+// 점선 십자(2×2)로 분할해 큰 글씨·바른 짜임을 유도. 게이트가 '칸 대비 작은 글씨'를
+// 저품질로 판정하는 도메인 특성(실기기 진단)에 대한 학습지 측 대응.
+// 선 톤은 판정 크롭(공백·게이트·OCR) 교란을 막기 위해 옅게 유지 — 파이프라인 검증 필수.
+const WRITING_GUIDE = {
+  cell_count: 4,
+  cell_size_mm: 22,
+  gap_mm: 4,
+  outline_color: '#d4d4d4',
+  cross_color: '#e0e0e0',
+  line_mm: 0.25,
+};
+
+/** 칸 rect 안 음절 칸 4개의 rect_mm 계산 (가운데 정렬) — 소비자 공통 규칙 */
+function guideCells(slotRect) {
+  const [sx, sy, sw, sh] = slotRect;
+  const { cell_count: n, cell_size_mm: c, gap_mm: g } = WRITING_GUIDE;
+  const total = n * c + (n - 1) * g;
+  const x0 = sx + (sw - total) / 2;
+  const y0 = sy + (sh - c) / 2;
+  return Array.from({ length: n }, (_, i) => [x0 + i * (c + g), y0, c, c]);
+}
+
 const SETS = [
   { n: 1, ids: [38, 39, 40, 41], words: ['나무', '오리', '나비', '바나나'], focus: '무받침' },
   { n: 2, ids: [42, 43, 44, 45], words: ['사과', '구름', '연필', '눈사람'], focus: '받침·복모음(ㅘ)' },
@@ -81,6 +105,7 @@ for (const set of SETS) {
     difficulty_focus: set.focus,
     page: { size_mm: PAGE, orientation: 'portrait', origin: 'top_left', coordinate_unit: 'mm' },
     slot_height_scale_vs_robot: SLOT_H / 20,
+    writing_guide: WRITING_GUIDE,
     corner_markers: cornerMarkers,
     note_slots: set.words.map((w, i) => ({
       slot_id: i + 1,
@@ -90,6 +115,7 @@ for (const set of SETS) {
       scene_key: SCENE_KEYS[w],
       rect_mm: SLOT_RECTS[i],
       cue_rect_mm: CUE_RECTS[i],
+      guide_cells_mm: guideCells(SLOT_RECTS[i]),
       label: `${i + 1}`,
     })),
   };

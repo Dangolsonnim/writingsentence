@@ -65,12 +65,25 @@ function renderSheet(t: DictTemplate): HTMLElement {
     label.style.top = `${y + 1}mm`;
     label.textContent = s.label;
     sheet.appendChild(label);
-    const base = document.createElement('div');
-    base.className = 'slot-base';
-    base.style.left = `${x + w * 0.08}mm`;
-    base.style.top = `${y + h * 0.85}mm`;
-    base.style.width = `${w * 0.9}mm`;
-    sheet.appendChild(base);
+    // 음절 쓰기 보조 칸: 연한 외곽 + 점선 십자(2×2) — 큰 글씨·바른 짜임 유도
+    const g = t.writing_guide;
+    for (const [gx, gy, gw, gh] of s.guide_cells_mm) {
+      const cell = document.createElement('div');
+      cell.className = 'guide-cell';
+      cell.style.left = `${gx}mm`;
+      cell.style.top = `${gy}mm`;
+      cell.style.width = `${gw}mm`;
+      cell.style.height = `${gh}mm`;
+      cell.style.border = `${g.line_mm}mm solid ${g.outline_color}`;
+      const vLine = document.createElement('div');
+      vLine.className = 'guide-cross-v';
+      vLine.style.borderLeft = `${g.line_mm}mm dashed ${g.cross_color}`;
+      const hLine = document.createElement('div');
+      hLine.className = 'guide-cross-h';
+      hLine.style.borderTop = `${g.line_mm}mm dashed ${g.cross_color}`;
+      cell.append(vLine, hLine);
+      sheet.appendChild(cell);
+    }
 
     const [cx, cy, cw, ch] = s.cue_rect_mm;
     const cue = document.createElement('div');

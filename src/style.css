@@ -432,9 +432,23 @@ h1 {
   border-radius: 2mm;
   position: absolute;
 }
-.sheet .slot-base {
+.sheet .guide-cell {
   position: absolute;
-  border-bottom: 0.35mm dashed #a9a9a9;
+  border-radius: 1mm;
+}
+.sheet .guide-cell .guide-cross-v {
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  bottom: 4%;
+  width: 0;
+}
+.sheet .guide-cell .guide-cross-h {
+  position: absolute;
+  top: 50%;
+  left: 4%;
+  right: 4%;
+  height: 0;
 }
 .sheet .slot-label {
   position: absolute;

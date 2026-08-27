@@ -18,7 +18,18 @@ export interface DictSlot {
   scene_key: string;
   rect_mm: [number, number, number, number];
   cue_rect_mm: [number, number, number, number];
+  /** 음절 쓰기 보조 칸(22mm 정사각 4개) — 인쇄 전용, 판정 좌표와 무관 */
+  guide_cells_mm: Array<[number, number, number, number]>;
   label: string;
+}
+
+export interface WritingGuide {
+  cell_count: number;
+  cell_size_mm: number;
+  gap_mm: number;
+  outline_color: string;
+  cross_color: string;
+  line_mm: number;
 }
 
 export interface DictTemplate {
@@ -30,6 +41,7 @@ export interface DictTemplate {
   difficulty_focus: string;
   page: { size_mm: [number, number]; orientation: string; origin: string; coordinate_unit: string };
   slot_height_scale_vs_robot: number;
+  writing_guide: WritingGuide;
   corner_markers: CornerMarker[];
   note_slots: DictSlot[];
 }

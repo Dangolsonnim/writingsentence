@@ -35,6 +35,25 @@ def render_page(template, slot_idx, text, messy=False):
         x, y, w, h = [v * PPM for v in s["rect_mm"]]
         draw.rounded_rectangle([x, y, x + w, y + h], radius=2 * PPM, outline=(51, 51, 51), width=max(2, int(0.6 * PPM)))
         draw.text((x + 1.5 * PPM, y + 1 * PPM), s["label"], fill=(85, 85, 85))
+        # 음절 쓰기 보조 칸 (연한 외곽 + 점선 십자) — 실물 학습지와 동일하게 렌더
+        guide = template.get("writing_guide")
+        if guide:
+            out_rgb = tuple(int(guide["outline_color"][k : k + 2], 16) for k in (1, 3, 5))
+            cross_rgb = tuple(int(guide["cross_color"][k : k + 2], 16) for k in (1, 3, 5))
+            lw = max(1, int(guide["line_mm"] * PPM))
+            for gx, gy, gw, gh in s["guide_cells_mm"]:
+                gx, gy, gw, gh = gx * PPM, gy * PPM, gw * PPM, gh * PPM
+                draw.rounded_rectangle([gx, gy, gx + gw, gy + gh], radius=PPM, outline=out_rgb, width=lw)
+                dash, gap_px = int(1.2 * PPM), int(1.6 * PPM)
+                cx_, cy_ = gx + gw / 2, gy + gh / 2
+                yy = gy + gh * 0.04
+                while yy < gy + gh * 0.96:
+                    draw.line([(cx_, yy), (cx_, min(yy + dash, gy + gh * 0.96))], fill=cross_rgb, width=lw)
+                    yy += dash + gap_px
+                xx = gx + gw * 0.04
+                while xx < gx + gw * 0.96:
+                    draw.line([(xx, cy_), (min(xx + dash, gx + gw * 0.96), cy_)], fill=cross_rgb, width=lw)
+                    xx += dash + gap_px
         if slot_idx == -1 and text == "ALL":
             slot_text = s["target_word"]
         elif i == slot_idx:

@@ -68,11 +68,21 @@ def draw_sheet(c, t, font, page_h_mm):
         c.setFillColorRGB(0.33, 0.33, 0.33)
         c.drawString((x + 1.5) * mm, y_mm(y + 4.5), s["label"])
         c.setFillColorRGB(0, 0, 0)
-        c.setLineWidth(0.35 * mm)
-        c.setStrokeColorRGB(0.66, 0.66, 0.66)
-        c.setDash(2, 2)
-        c.line((x + w * 0.08) * mm, y_mm(y + h * 0.85), (x + w * 0.98) * mm, y_mm(y + h * 0.85))
-        c.setDash()
+        # 음절 쓰기 보조 칸: 연한 외곽 + 점선 십자(2×2)
+        g = t["writing_guide"]
+        line_w = g["line_mm"] * mm
+        out_rgb = tuple(int(g["outline_color"][i : i + 2], 16) / 255 for i in (1, 3, 5))
+        cross_rgb = tuple(int(g["cross_color"][i : i + 2], 16) / 255 for i in (1, 3, 5))
+        for gx, gy, gw, gh in s["guide_cells_mm"]:
+            c.setLineWidth(line_w)
+            c.setStrokeColorRGB(*out_rgb)
+            c.setDash()
+            c.roundRect(gx * mm, y_mm(gy + gh), gw * mm, gh * mm, 1 * mm)
+            c.setStrokeColorRGB(*cross_rgb)
+            c.setDash(1.2, 1.6)
+            c.line((gx + gw / 2) * mm, y_mm(gy + gh * 0.96), (gx + gw / 2) * mm, y_mm(gy + gh * 0.04))
+            c.line((gx + gw * 0.04) * mm, y_mm(gy + gh / 2), (gx + gw * 0.96) * mm, y_mm(gy + gh / 2))
+            c.setDash()
 
         cx, cy, cw, ch = s["cue_rect_mm"]
         cue_path = os.path.join(CUE_DIR, f"{s['scene_key']}.png")
