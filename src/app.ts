@@ -259,6 +259,33 @@ async function beginSession(template: DictTemplate): Promise<void> {
   renderCueIntro();
 }
 
+/** 진행 중 세션에서 뒤로 나가기 — abandoned 처리, 기록이 있으면 패키지 보존 */
+async function leaveSession(): Promise<void> {
+  const session = state.session;
+  if (session && session.session_status === 'active') {
+    session.session_status = 'abandoned';
+    session.ended_at = Date.now();
+    session.updated_at = Date.now();
+    await saveSession(session);
+    await logEvent('session_abandoned', {
+      sessionId: session.session_id,
+      participantId: session.participant_id,
+      payload: { captureCount: state.captureIndex + 1 },
+    });
+    if (state.captureIndex >= 0) {
+      try {
+        await exportSessionPackage(session, state.participant!);
+        void processUploadQueue();
+      } catch {
+        // 내보내기 실패해도 이동은 진행 (데이터는 IndexedDB에 남음)
+      }
+    }
+  }
+  state.session = null;
+  state.template = null;
+  renderSessionSelect();
+}
+
 /* ───────── 그림 단서 소개 (시작 시 1회) ───────── */
 
 function renderCueIntro(): void {
@@ -269,6 +296,7 @@ function renderCueIntro(): void {
       <p class="speech">선생님이 불러 주는 낱말을 잘 듣고,<br/>학습지의 <b>네 칸을 모두</b> 연필로 써 보세요.<br/>다 쓰면 사진을 찍어요!</p>
       <div class="cue-grid"></div>
       <button class="big-btn green" id="btn-go">다 썼어요! 사진 찍기</button>
+      <button class="big-btn ghost" id="btn-back">◀ 차시 선택으로</button>
     </div>`);
   const grid = el.querySelector('.cue-grid')!;
   template.note_slots.forEach((s) => {
@@ -277,6 +305,7 @@ function renderCueIntro(): void {
     grid.appendChild(item);
   });
   el.querySelector('#btn-go')!.addEventListener('click', () => void renderCapture());
+  el.querySelector('#btn-back')!.addEventListener('click', () => void leaveSession());
   setScreen(el);
 }
 
@@ -287,7 +316,10 @@ async function renderCapture(): Promise<void> {
   const el = h(`
     <div class="ar-screen">
       <div class="ar-view"></div>
-      <div class="ar-topbar"><span class="ar-status">카메라를 켜는 중…</span></div>
+      <div class="ar-topbar">
+        <button class="ar-back" id="btn-ar-back">◀ 뒤로</button>
+        <span class="ar-status">카메라를 켜는 중…</span>
+      </div>
       <div class="ar-actions">
         <div id="sheet-feedback"></div>
         <button class="big-btn green" id="btn-shot" disabled>📷 찰칵!</button>
@@ -305,6 +337,7 @@ async function renderCapture(): Promise<void> {
 
   const ar = new LiveArView(el.querySelector('.ar-view') as HTMLElement, template, state.templates);
   state.ar = ar;
+  el.querySelector('#btn-ar-back')!.addEventListener('click', () => renderCueIntro());
 
   const refreshButtons = () => {
     const allPassed = state.words.every((w) => w.passed);
@@ -680,7 +713,10 @@ async function showCollection(): Promise<void> {
     <div class="stage-wrap">
       <div class="stage-caption">오늘 만든 낱말 친구들이에요!</div>
       <canvas></canvas>
-      <div class="stage-actions"><button class="big-btn green" id="btn-finish">오늘 받아쓰기 끝!</button></div>
+      <div class="stage-actions">
+        <button class="big-btn green" id="btn-finish">오늘 받아쓰기 끝!</button>
+        <button class="big-btn ghost" id="btn-back-capture">◀ 돌아가기</button>
+      </div>
     </div>`);
   document.body.appendChild(wrap);
   const canvas = wrap.querySelector('canvas') as HTMLCanvasElement;
@@ -691,6 +727,10 @@ async function showCollection(): Promise<void> {
     payload: { rewardLevels: state.words.map((w) => w.rewardLevel) },
   });
   wrap.querySelector('#btn-finish')!.addEventListener('click', () => void finishSession());
+  wrap.querySelector('#btn-back-capture')!.addEventListener('click', () => {
+    stopStage();
+    void renderCapture();
+  });
 }
 
 async function finishSession(): Promise<void> {

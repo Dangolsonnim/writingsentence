@@ -349,9 +349,22 @@ h1 {
   top: 0;
   left: 0;
   right: 0;
-  padding: 12px;
+  padding: 12px 56px;
   text-align: center;
   z-index: 2;
+}
+.ar-back {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  background: rgba(20, 35, 60, 0.72);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
 }
 .ar-status {
   display: inline-block;
