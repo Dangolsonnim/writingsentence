@@ -41,7 +41,9 @@ export async function getUploadConfig(): Promise<UploadConfig> {
   const row = await get<{ key: string; value: UploadConfig }>('settings', SETTINGS_KEY);
   return (
     row?.value ?? {
-      functionUrl: 'https://wdjovodhalidiqhlojvj.supabase.co/functions/v1/classroom-upload',
+      // 배포2 전용 Supabase 프로젝트(2026-08-28 사용자 확정 — 로봇 앱 배포1 DB와 분리).
+      // 토큰은 공개 저장소 유출 방지를 위해 기본값 없음 — 교사 설정에서 입력.
+      functionUrl: 'https://ehltjfgafaxyfebwdhis.supabase.co/functions/v1/classroom-upload',
       token: '',
     }
   );
