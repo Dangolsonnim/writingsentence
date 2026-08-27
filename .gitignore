@@ -1,0 +1,11 @@
+# 의존성·빌드 산출물
+node_modules/
+dist/
+dev-dist/
+
+# E2E 번들(생성물, npm run test:e2e가 재생성)
+.e2e/
+
+# 로그·임시
+*.log
+Thumbs.db

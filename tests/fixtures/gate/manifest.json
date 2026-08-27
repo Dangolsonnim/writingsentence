@@ -1,0 +1,46 @@
+{
+ "neat": [
+  {
+   "file": "Q123.png",
+   "ref_gate_score": 3.5221135e-05
+  },
+  {
+   "file": "Q426.png",
+   "ref_gate_score": 4.032015e-05
+  },
+  {
+   "file": "Q431.png",
+   "ref_gate_score": 5.0277315e-05
+  },
+  {
+   "file": "Q326.png",
+   "ref_gate_score": 0.00011918725
+  },
+  {
+   "file": "Q010.png",
+   "ref_gate_score": 0.00012250367
+  }
+ ],
+ "scribble": [
+  {
+   "file": "Q029.png",
+   "ref_gate_score": 0.9999192
+  },
+  {
+   "file": "Q411.png",
+   "ref_gate_score": 0.9999485
+  },
+  {
+   "file": "Q127.png",
+   "ref_gate_score": 0.99995184
+  },
+  {
+   "file": "Q151.png",
+   "ref_gate_score": 0.99995446
+  },
+  {
+   "file": "Q213.png",
+   "ref_gate_score": 0.9999721
+  }
+ ]
+}

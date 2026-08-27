@@ -1,0 +1,31 @@
+{
+  "name": "dictweb",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "받아쓰기 웹앱 (dictweb1) — 초등 1~2학년 손글씨 받아쓰기, 브라우저 내 게이트/OCR 판정 + three.js 실체화",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "esbuild tests/e2e_pipeline.node.ts --bundle --platform=node --format=cjs --external:onnxruntime-node --external:@techstark/opencv-js --external:pngjs --outfile=.e2e/e2e_pipeline.cjs --log-level=warning && node .e2e/e2e_pipeline.cjs",
+    "verify": "npm test && npm run test:e2e"
+  },
+  "dependencies": {
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "fflate": "^0.8.2",
+    "onnxruntime-web": "^1.19.2",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.169.0",
+    "onnxruntime-node": "^1.19.2",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-plugin-pwa": "^0.20.5",
+    "vitest": "^2.1.2"
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "dictionary": "DICT_4X4_50",
+  "physicalSizeMm": 35,
+  "markers": [
+    {
+      "arucoId": 38,
+      "markerName": "DICT_01_TL_MARKER",
+      "templateId": "DICT_01_v1",
+      "problemId": "DICT_01",
+      "anchor": "TL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 39,
+      "markerName": "DICT_01_TR_MARKER",
+      "templateId": "DICT_01_v1",
+      "problemId": "DICT_01",
+      "anchor": "TR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 40,
+      "markerName": "DICT_01_BR_MARKER",
+      "templateId": "DICT_01_v1",
+      "problemId": "DICT_01",
+      "anchor": "BR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        269.5
+      ]
+    },
+    {
+      "arucoId": 41,
+      "markerName": "DICT_01_BL_MARKER",
+      "templateId": "DICT_01_v1",
+      "problemId": "DICT_01",
+      "anchor": "BL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        269.5
+      ]
+    },
+    {
+      "arucoId": 42,
+      "markerName": "DICT_02_TL_MARKER",
+      "templateId": "DICT_02_v1",
+      "problemId": "DICT_02",
+      "anchor": "TL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 43,
+      "markerName": "DICT_02_TR_MARKER",
+      "templateId": "DICT_02_v1",
+      "problemId": "DICT_02",
+      "anchor": "TR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 44,
+      "markerName": "DICT_02_BR_MARKER",
+      "templateId": "DICT_02_v1",
+      "problemId": "DICT_02",
+      "anchor": "BR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        269.5
+      ]
+    },
+    {
+      "arucoId": 45,
+      "markerName": "DICT_02_BL_MARKER",
+      "templateId": "DICT_02_v1",
+      "problemId": "DICT_02",
+      "anchor": "BL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        269.5
+      ]
+    },
+    {
+      "arucoId": 46,
+      "markerName": "DICT_03_TL_MARKER",
+      "templateId": "DICT_03_v1",
+      "problemId": "DICT_03",
+      "anchor": "TL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 47,
+      "markerName": "DICT_03_TR_MARKER",
+      "templateId": "DICT_03_v1",
+      "problemId": "DICT_03",
+      "anchor": "TR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        27.5
+      ]
+    },
+    {
+      "arucoId": 48,
+      "markerName": "DICT_03_BR_MARKER",
+      "templateId": "DICT_03_v1",
+      "problemId": "DICT_03",
+      "anchor": "BR",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        182.5,
+        269.5
+      ]
+    },
+    {
+      "arucoId": 49,
+      "markerName": "DICT_03_BL_MARKER",
+      "templateId": "DICT_03_v1",
+      "problemId": "DICT_03",
+      "anchor": "BL",
+      "dictionary": "DICT_4X4_50",
+      "physicalSizeMm": 35,
+      "innerRatio": 0.88,
+      "centerMm": [
+        27.5,
+        269.5
+      ]
+    }
+  ]
+}

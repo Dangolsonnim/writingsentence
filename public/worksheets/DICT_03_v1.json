@@ -1,0 +1,162 @@
+{
+  "template_id": "DICT_03_v1",
+  "template_version": "1.0.0",
+  "problem_id": "DICT_03",
+  "content_type": "dictation",
+  "title": "받아쓰기 3차시",
+  "difficulty_focus": "된소리(ㄸ·ㄲ)·복모음(ㅙ·ㅐ)",
+  "page": {
+    "size_mm": [
+      210,
+      297
+    ],
+    "orientation": "portrait",
+    "origin": "top_left",
+    "coordinate_unit": "mm"
+  },
+  "slot_height_scale_vs_robot": 1.4,
+  "corner_markers": [
+    {
+      "aruco_id": 46,
+      "name": "DICT_03_TL_MARKER",
+      "anchor": "TL",
+      "top_left_mm": [
+        10,
+        10
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 47,
+      "name": "DICT_03_TR_MARKER",
+      "anchor": "TR",
+      "top_left_mm": [
+        165,
+        10
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 48,
+      "name": "DICT_03_BR_MARKER",
+      "anchor": "BR",
+      "top_left_mm": [
+        165,
+        252
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 49,
+      "name": "DICT_03_BL_MARKER",
+      "anchor": "BL",
+      "top_left_mm": [
+        10,
+        252
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    }
+  ],
+  "note_slots": [
+    {
+      "slot_id": 1,
+      "order": 1,
+      "word_id": "D3W1",
+      "target_word": "딸기",
+      "scene_key": "strawberry",
+      "rect_mm": [
+        56,
+        58,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        56,
+        32,
+        32
+      ],
+      "label": "1"
+    },
+    {
+      "slot_id": 2,
+      "order": 2,
+      "word_id": "D3W2",
+      "target_word": "토끼",
+      "scene_key": "rabbit",
+      "rect_mm": [
+        56,
+        106,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        104,
+        32,
+        32
+      ],
+      "label": "2"
+    },
+    {
+      "slot_id": 3,
+      "order": 3,
+      "word_id": "D3W3",
+      "target_word": "돼지",
+      "scene_key": "pig",
+      "rect_mm": [
+        56,
+        154,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        152,
+        32,
+        32
+      ],
+      "label": "3"
+    },
+    {
+      "slot_id": 4,
+      "order": 4,
+      "word_id": "D3W4",
+      "target_word": "무지개",
+      "scene_key": "rainbow",
+      "rect_mm": [
+        56,
+        202,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        200,
+        32,
+        32
+      ],
+      "label": "4"
+    }
+  ]
+}

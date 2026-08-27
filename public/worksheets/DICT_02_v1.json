@@ -1,0 +1,162 @@
+{
+  "template_id": "DICT_02_v1",
+  "template_version": "1.0.0",
+  "problem_id": "DICT_02",
+  "content_type": "dictation",
+  "title": "받아쓰기 2차시",
+  "difficulty_focus": "받침·복모음(ㅘ)",
+  "page": {
+    "size_mm": [
+      210,
+      297
+    ],
+    "orientation": "portrait",
+    "origin": "top_left",
+    "coordinate_unit": "mm"
+  },
+  "slot_height_scale_vs_robot": 1.4,
+  "corner_markers": [
+    {
+      "aruco_id": 42,
+      "name": "DICT_02_TL_MARKER",
+      "anchor": "TL",
+      "top_left_mm": [
+        10,
+        10
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 43,
+      "name": "DICT_02_TR_MARKER",
+      "anchor": "TR",
+      "top_left_mm": [
+        165,
+        10
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 44,
+      "name": "DICT_02_BR_MARKER",
+      "anchor": "BR",
+      "top_left_mm": [
+        165,
+        252
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    },
+    {
+      "aruco_id": 45,
+      "name": "DICT_02_BL_MARKER",
+      "anchor": "BL",
+      "top_left_mm": [
+        10,
+        252
+      ],
+      "size_mm": [
+        35,
+        35
+      ],
+      "inner_ratio": 0.88,
+      "purpose": "page_homography"
+    }
+  ],
+  "note_slots": [
+    {
+      "slot_id": 1,
+      "order": 1,
+      "word_id": "D2W1",
+      "target_word": "사과",
+      "scene_key": "apple",
+      "rect_mm": [
+        56,
+        58,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        56,
+        32,
+        32
+      ],
+      "label": "1"
+    },
+    {
+      "slot_id": 2,
+      "order": 2,
+      "word_id": "D2W2",
+      "target_word": "구름",
+      "scene_key": "cloud",
+      "rect_mm": [
+        56,
+        106,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        104,
+        32,
+        32
+      ],
+      "label": "2"
+    },
+    {
+      "slot_id": 3,
+      "order": 3,
+      "word_id": "D2W3",
+      "target_word": "연필",
+      "scene_key": "pencil",
+      "rect_mm": [
+        56,
+        154,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        152,
+        32,
+        32
+      ],
+      "label": "3"
+    },
+    {
+      "slot_id": 4,
+      "order": 4,
+      "word_id": "D2W4",
+      "target_word": "눈사람",
+      "scene_key": "snowman",
+      "rect_mm": [
+        56,
+        202,
+        115,
+        28
+      ],
+      "cue_rect_mm": [
+        16,
+        200,
+        32,
+        32
+      ],
+      "label": "4"
+    }
+  ]
+}
