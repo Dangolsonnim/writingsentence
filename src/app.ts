@@ -1,9 +1,9 @@
 /**
  * 받아쓰기 웹앱 메인 흐름 — 웹판 v2 (사용자 확정 2026-08-27):
  * 로그인 → 차시 선택 → 그림 단서 4개 소개 → 학생이 학습지 4칸을 모두 쓴 뒤
- * [전체 촬영] → 4칸 일괄 판정(게이트만; 철자는 로그용) → 라이브 카메라 AR로
- * 통과 낱말 3D 실체화(등급 3/4/5 연동) + "멋진 글자예요!" 말풍선, 미달 낱말은
- * "좀 더 바르게 써볼까요?" 말풍선 → 고쳐 쓰고 재촬영(통과 상태 유지) →
+ * [전체 촬영] → 4칸 일괄 판정(margin 모드: AI 읽기 신뢰도 conf·완전성 C·여유도 M) →
+ * 라이브 카메라 AR로 통과 낱말 3D 실체화(M 밴드 3/4/5 연동) + "멋진 글자예요!" 말풍선,
+ * 미달 낱말은 안내 말풍선 → 고쳐 쓰고 재촬영(매 촬영 전 칸 재판정 — 유지 정책 폐지) →
  * 전원 통과 → 모아 보기 → 종료. 점수/랭킹/타이머 UI 없음.
  */
 import { loadEngines, type Engines } from './core/engines';
@@ -410,9 +410,6 @@ async function handleCapture(
   showOverlay('낱말을 살펴보고 있어요…');
   try {
     const scaled = downscaleRaster(frame, 2400);
-    const passedBefore = new Set(
-      template.note_slots.filter((_, i) => state.words[i].passed).map((s) => s.word_id)
-    );
     const escapeActiveByWord: Record<string, boolean> = {};
     template.note_slots.forEach((s, i) => {
       escapeActiveByWord[s.word_id] = state.words[i].gateRejects >= ESCAPE_AFTER_REJECTS;
@@ -421,7 +418,6 @@ async function handleCapture(
       template,
       gatePassThreshold: session.gate_pass_threshold,
       escapeActiveByWord,
-      passedWords: passedBefore,
       allTemplates: state.templates,
       verifyTau1: state.verifyTau1,
       verifyTau2: state.verifyTau2,
@@ -437,34 +433,30 @@ async function handleCapture(
           ? '오늘 학습지가 아닌 것 같아요. 오늘 학습지를 찍어 볼까요?'
           : '학습지가 잘 보이게 다시 찍어 볼까요?';
       if (feedback) feedback.innerHTML = `<div class="feedback warn">${msg}</div>`;
-      await recordCapture(result, passedBefore, escapeActiveByWord);
+      await recordCapture(result, escapeActiveByWord);
       return;
     }
     if (feedback) feedback.innerHTML = '';
 
-    // 상태 갱신 (통과 누적 유지, 탈출구 카운트)
+    // 상태 갱신 — 매 촬영 전 칸 재판정(통과 유지 정책 폐지, 2026-08-28 사용자 확정)
     const displays: ArSlotDisplay[] = [];
     result.slots.forEach((sr, i) => {
       const w = state.words[i];
       const slot = template.note_slots[i];
       if (sr.status === 'gate_reject' || sr.status === 'illegible') w.gateRejects += 1;
-      if (sr.status === 'pass') {
-        if (!w.passed) {
-          w.passed = true;
-          w.escapeUsed = sr.gateDecision === 'override' && escapeActiveByWord[slot.word_id];
-        }
-        w.rewardLevel = Math.max(w.rewardLevel, sr.rewardLevel);
-      }
+      w.passed = sr.status === 'pass';
+      w.rewardLevel = sr.status === 'pass' ? sr.rewardLevel : 0;
+      if (sr.status === 'pass' && sr.gateDecision === 'override') w.escapeUsed = true;
       displays.push({
         slotIndex: i,
         sceneKey: slot.scene_key,
-        rewardLevel: w.passed ? w.rewardLevel : 0,
+        rewardLevel: w.rewardLevel,
         passed: w.passed,
-        message: bubbleMessage(sr, w, escapeActiveByWord[slot.word_id]),
+        message: bubbleMessage(sr, escapeActiveByWord[slot.word_id]),
       });
     });
 
-    await recordCapture(result, passedBefore, escapeActiveByWord);
+    await recordCapture(result, escapeActiveByWord);
     // 진단용 콘솔 출력 (chrome://inspect 원격 디버깅에서 확인 가능)
     console.table(
       result.slots.map((sr) => ({
@@ -505,9 +497,9 @@ async function handleCapture(
   }
 }
 
-function bubbleMessage(sr: SlotJudgeResult, w: WordProgress, escapeActive: boolean): string {
-  if (w.passed) {
-    if (sr.gateDecision === 'override' && escapeActive && sr.status === 'pass') {
+function bubbleMessage(sr: SlotJudgeResult, escapeActive: boolean): string {
+  if (sr.status === 'pass') {
+    if (sr.gateDecision === 'override' && escapeActive) {
       return '열심히 썼네요!';
     }
     return '멋진 글자예요!';
@@ -585,7 +577,6 @@ async function rasterToPngBlob(r: Raster): Promise<Blob> {
 
 async function recordCapture(
   result: SheetJudgeResult,
-  passedBefore: Set<string>,
   escapeActiveByWord: Record<string, boolean>
 ): Promise<void> {
   const session = state.session!;
@@ -638,7 +629,6 @@ async function recordCapture(
       }
     }
 
-    const w = state.words[sr.slotIndex];
     const escapeActive = escapeActiveByWord[slot.word_id] === true;
     const row: AttemptRow = {
       note_attempt_id: attemptId,
@@ -711,11 +701,10 @@ async function recordCapture(
       estimated_written: sr.verify?.estimatedWritten ?? null,
       reward_level: sr.status === 'pass' ? sr.rewardLevel : 0,
       retry_index: state.captureIndex,
-      escape_used:
-        sr.gateDecision === 'override' && escapeActive && !passedBefore.has(slot.word_id),
+      escape_used: sr.gateDecision === 'override' && escapeActive && sr.status === 'pass',
       app_version: APP_VERSION,
       judge_status: sr.status,
-      feedback_message: bubbleMessage(sr, w, escapeActive),
+      feedback_message: bubbleMessage(sr, escapeActive),
       marker_detail: result.markerDetail,
       scan_duration_ms: result.scanMs,
       gate_duration_ms: sr.gateMs,

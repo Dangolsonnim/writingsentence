@@ -18,8 +18,14 @@ import { lumaAt, type Raster } from './raster';
 
 export const VERIFY_TAU1_DEFAULT = 0.25;
 export const VERIFY_TAU2_DEFAULT = 0.45;
-/** 읽기 신뢰도(방출 토큰 geomean) 절대 임계 — 실측: 낙서 ≤0.26, 정상 글씨 ≥0.48 */
-export const VERIFY_LAMBDA_DEFAULT = 0.35;
+/**
+ * 읽기 신뢰도(방출 토큰 geomean) 절대 임계.
+ * 기본 0.8 = 2026-08-28 사용자 실기기 보정(정자 통과·날림 거부가 원하는 대로 갈리는 값).
+ * 표본이 적어 일반화 근거는 약함 — 전 칸 conf 로깅으로 파일럿에서 재보정할 것.
+ * (참고 분포: 낙서 ≤0.26, 사용자 정자 0.72~0.97, 성인 골든 med 0.81·min 0.48 —
+ *  0.8에서는 성인 골든의 약 절반이 재촬영 안내로 떨어짐)
+ */
+export const VERIFY_LAMBDA_DEFAULT = 0.8;
 /**
  * 판독 완전성 C = 자유 판독 자모 수 / 정답 자모 수 최소값.
  * 날려 쓴 글씨는 일부 글자만 자신 있게 읽혀('나무'→'나') conf·M을 통과하는 구멍을 막는다.

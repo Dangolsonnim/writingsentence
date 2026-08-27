@@ -82,8 +82,6 @@ export interface SheetJudgeOptions {
   gatePassThreshold: number; // A=4 / B=3
   /** word_id → 게이트 REJECT 누적 3회 이상 여부(탈출구 활성) */
   escapeActiveByWord: Record<string, boolean>;
-  /** 이미 통과한 word_id — 재촬영에서도 통과 상태 유지(게이트·검증은 기록만) */
-  passedWords: Set<string>;
   allTemplates: DictTemplate[];
   /** 철자 검증 임계 (설정값 — 파일럿에서 아동 필체로 재보정) */
   verifyTau1?: number;
@@ -217,12 +215,13 @@ export async function judgeSheet(
     sr.gateGrade = gate.grade;
     sr.gateScore = gate.score;
 
+    // 매 촬영 전 칸 새로 판정 — '통과 유지' 정책 폐지(2026-08-28 사용자 확정:
+    // 이전에 통과했더라도 다시 날려 쓰면 현재 촬영 기준으로 안내가 나가야 함)
     const mode: JudgeMode = opt.judgeMode ?? 'margin';
-    const alreadyPassed = opt.passedWords.has(slot.word_id);
     const gatePassed = gate.grade >= opt.gatePassThreshold;
     const escapeActive = opt.escapeActiveByWord[slot.word_id] === true;
     if (gatePassed) sr.gateDecision = 'pass';
-    else if (alreadyPassed || escapeActive) sr.gateDecision = 'override';
+    else if (escapeActive) sr.gateDecision = 'override';
     else sr.gateDecision = 'reject';
 
     if (mode === 'gate' && sr.gateDecision === 'reject') {
@@ -240,7 +239,7 @@ export async function judgeSheet(
     sr.ocrMs = Math.round(performance.now() - tOcr);
 
     if (mode === 'gate') {
-      if (alreadyPassed || sr.verify.decision === 'correct') {
+      if (sr.verify.decision === 'correct') {
         sr.status = 'pass';
         sr.rewardLevel = Math.min(5, Math.max(3, gate.grade));
       } else if (sr.verify.decision === 'unclear') {
@@ -253,10 +252,9 @@ export async function judgeSheet(
 
     // margin 모드: 게이트는 위에서 로깅만 됨. 판정은 conf·M이 담당.
     const v = sr.verify;
-    if (alreadyPassed || v.decision === 'correct') {
+    if (v.decision === 'correct') {
       sr.status = 'pass';
       sr.rewardLevel = v.margin <= 0.03 ? 5 : v.margin <= 0.1 ? 4 : 3;
-      if (alreadyPassed && v.decision !== 'correct') sr.rewardLevel = 3;
     } else if (escapeActive && v.decision === 'illegible') {
       // 탈출구: 글씨체 미달 누적 3회 → override 통과 (철자 오답에는 미적용)
       sr.gateDecision = 'override';

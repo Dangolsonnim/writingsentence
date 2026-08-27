@@ -85,7 +85,6 @@ async function main(): Promise<void> {
     template: templates[0],
     gatePassThreshold: 3,
     escapeActiveByWord: {},
-    passedWords: new Set<string>(),
     allTemplates: templates,
     ...overrides,
   });
@@ -128,7 +127,8 @@ async function main(): Promise<void> {
 
   console.log('[margin] 판독 가능한 큰 오류(실물 로봇 명령 vs 나무) → 처음부터 문구:');
   {
-    const r = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts());
+    // 기본 λ=0.8에서는 이 크롭(conf 0.39)이 illegible로 먼저 걸리므로 λ를 낮춰 해당 분기 검증
+    const r = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts({ verifyLambda: 0.3 }));
     const s0 = r.slots[0];
     console.log(
       `  slot0=${s0.status} conf=${s0.verify?.freeConf.toFixed(2)} M=${s0.verify?.margin.toFixed(3)} M_best=${s0.verify?.bestNeighborMargin?.toFixed(3)} msg='${s0.verify?.message}'`
@@ -187,16 +187,13 @@ async function main(): Promise<void> {
     check('중성 지적 문구', (w0.verify?.jamo?.message ?? '').includes('중성'));
   }
 
-  console.log('통과 상태 유지: 이미 통과한 낱말은 미달 크롭이어도 pass 유지:');
+  console.log('[margin] 매 촬영 재판정: 통과 후 날려 쓰면 다시 미달로 안내(유지 정책 폐지):');
   {
-    const r = await judgeSheet(
-      loadPng(join(syn, 'p_scribble.png')),
-      engines,
-      opts({ passedWords: new Set(['D1W1']) })
-    );
-    const s0 = r.slots[0];
-    console.log(`  slot0=${s0.status} decision=${s0.gateDecision}`);
-    check('passed 유지(override)', s0.status === 'pass' && s0.gateDecision === 'override');
+    const good = await judgeSheet(loadPng(join(syn, 'p_full_t1.png')), engines, opts());
+    const bad = await judgeSheet(loadPng(join(syn, 'p_scribble.png')), engines, opts());
+    console.log(`  1차(정자)=${good.slots[0].status} → 2차(낙서)=${bad.slots[0].status}`);
+    check('정자 촬영 pass', good.slots[0].status === 'pass');
+    check('직후 낙서 촬영은 pass 아님(재판정)', bad.slots[0].status !== 'pass');
   }
 
   console.log('공백 시트: 4칸 전부 blank:');
