@@ -7,7 +7,7 @@
  * 전원 통과 → 모아 보기 → 종료. 점수/랭킹/타이머 UI 없음.
  */
 import { loadEngines, type Engines } from './core/engines';
-import { judgeSheet, type SheetJudgeResult, type SlotJudgeResult } from './core/pipeline';
+import { judgeSheet, type JudgeMode, type SheetJudgeResult, type SlotJudgeResult } from './core/pipeline';
 import type { Raster } from './core/raster';
 import { initCv } from './core/vision';
 import { loadAllTemplates, type DictTemplate } from './core/worksheet';
@@ -41,7 +41,7 @@ import {
   startUploader,
 } from './logging/packager';
 import { cueStill, playCollection, type RewardHandle } from './three/stage';
-import { VERIFY_TAU1_DEFAULT, VERIFY_TAU2_DEFAULT } from './core/verify';
+import { VERIFY_LAMBDA_DEFAULT, VERIFY_TAU1_DEFAULT, VERIFY_TAU2_DEFAULT } from './core/verify';
 import { LiveArView, type ArSlotDisplay } from './ui/live_ar';
 
 const DEFAULT_PIN = '7391';
@@ -63,6 +63,8 @@ interface AppState {
   verifyTau2: number;
   /** 연구자용 게이트 임계 수동 조정(null=학급 규칙 A=4/B=3) — 테스트·파일럿 보정용 */
   gateThresholdOverride: number | null;
+  verifyLambda: number;
+  judgeMode: JudgeMode;
   participant: ParticipantRow | null;
   session: SessionRow | null;
   template: DictTemplate | null;
@@ -80,6 +82,8 @@ const state: AppState = {
   verifyTau1: VERIFY_TAU1_DEFAULT,
   verifyTau2: VERIFY_TAU2_DEFAULT,
   gateThresholdOverride: null,
+  verifyLambda: VERIFY_LAMBDA_DEFAULT,
+  judgeMode: 'margin',
   participant: null,
   session: null,
   template: null,
@@ -96,6 +100,8 @@ export async function startApp(root: HTMLElement): Promise<void> {
   state.verifyTau1 = await getSetting('verify_tau1', VERIFY_TAU1_DEFAULT);
   state.verifyTau2 = await getSetting('verify_tau2', VERIFY_TAU2_DEFAULT);
   state.gateThresholdOverride = await getSetting<number | null>('gate_threshold_override', null);
+  state.verifyLambda = await getSetting('verify_lambda', VERIFY_LAMBDA_DEFAULT);
+  state.judgeMode = (await getSetting<JudgeMode>('judge_mode', 'margin')) as JudgeMode;
   const [templates] = await Promise.all([loadAllTemplates(import.meta.env.BASE_URL), initCv()]);
   state.templates = templates;
   state.engines = await loadEngines((msg) => showOverlay(msg));
@@ -241,6 +247,8 @@ async function beginSession(template: DictTemplate): Promise<void> {
     gate_model_version: GATE_MODEL_VERSION,
     verify_tau1: state.verifyTau1,
     verify_tau2: state.verifyTau2,
+    verify_lambda: state.verifyLambda,
+    judge_mode: state.judgeMode,
   };
   state.session = session;
   state.template = template;
@@ -417,6 +425,8 @@ async function handleCapture(
       allTemplates: state.templates,
       verifyTau1: state.verifyTau1,
       verifyTau2: state.verifyTau2,
+      verifyLambda: state.verifyLambda,
+      judgeMode: state.judgeMode,
     });
 
     const feedback = document.querySelector('#sheet-feedback');
@@ -437,7 +447,7 @@ async function handleCapture(
     result.slots.forEach((sr, i) => {
       const w = state.words[i];
       const slot = template.note_slots[i];
-      if (sr.status === 'gate_reject') w.gateRejects += 1;
+      if (sr.status === 'gate_reject' || sr.status === 'illegible') w.gateRejects += 1;
       if (sr.status === 'pass') {
         if (!w.passed) {
           w.passed = true;
@@ -505,10 +515,12 @@ function bubbleMessage(sr: SlotJudgeResult, w: WordProgress, escapeActive: boole
   switch (sr.status) {
     case 'blank':
       return '여기에 낱말을 써 보세요';
+    case 'illegible':
+      return sr.verify?.message ?? '글자를 읽기 어려워요. 더 크고 반듯하게 써 볼까요?';
     case 'spell_unclear':
-      return '한 번만 더 또박또박 써서 찍어 볼까요?';
+      return sr.verify?.message ?? '한 번만 더 또박또박 써서 찍어 볼까요?';
     case 'spell_wrong':
-      return sr.verify?.jamo?.message ?? '다시 한 번 잘 보고 써 볼까요?';
+      return sr.verify?.message ?? sr.verify?.jamo?.message ?? '다시 한 번 잘 보고 써 볼까요?';
     default:
       return '좀 더 바르게 써볼까요?';
   }
@@ -691,6 +703,10 @@ async function recordCapture(
       verify_decision: sr.verify?.decision ?? null,
       verify_tau1: sr.verify?.tau1 ?? null,
       verify_tau2: sr.verify?.tau2 ?? null,
+      verify_lambda: sr.verify?.lambda ?? null,
+      verify_free_conf: sr.verify?.freeConf ?? null,
+      verify_best_margin: sr.verify?.bestNeighborMargin ?? null,
+      judge_mode: state.judgeMode,
       estimated_written: sr.verify?.estimatedWritten ?? null,
       reward_level: sr.status === 'pass' ? sr.rewardLevel : 0,
       retry_index: state.captureIndex,
@@ -820,7 +836,14 @@ async function renderSettings(): Promise<void> {
             <option value="B">B반 — 임계 3</option>
           </select>
         </div>
-        <div class="field"><label>게이트 임계 조정 (연구자 테스트용 — 기본: 학급 규칙)</label>
+        <div class="field"><label>판정 모드</label>
+          <select id="judge-mode" ${sessionActive ? 'disabled' : ''}>
+            <option value="margin">AI 읽기 신뢰도 (기본 — 게이트 미사용)</option>
+            <option value="gate">게이트 등급 (기존 방식)</option>
+          </select>
+        </div>
+        <div class="field"><label>읽기 신뢰도 임계 λ (기본 0.35)</label><input id="verify-lambda" type="number" step="0.01" min="0" max="1" ${sessionActive ? 'disabled' : ''} /></div>
+        <div class="field"><label>게이트 임계 조정 (gate 모드 전용 — 기본: 학급 규칙)</label>
           <select id="gate-override" ${sessionActive ? 'disabled' : ''}>
             <option value="">학급 규칙 (A=4 / B=3)</option>
             <option value="1">1 (매우 완화 — 테스트용)</option>
@@ -862,6 +885,8 @@ async function renderSettings(): Promise<void> {
       <button class="big-btn ghost" id="btn-close">닫기</button>
     </div>`);
   (el.querySelector('#class-group') as HTMLSelectElement).value = state.classGroup;
+  (el.querySelector('#judge-mode') as HTMLSelectElement).value = state.judgeMode;
+  (el.querySelector('#verify-lambda') as HTMLInputElement).value = String(state.verifyLambda);
   (el.querySelector('#gate-override') as HTMLSelectElement).value =
     state.gateThresholdOverride === null ? '' : String(state.gateThresholdOverride);
   (el.querySelector('#verify-tau1') as HTMLInputElement).value = String(state.verifyTau1);
@@ -874,6 +899,13 @@ async function renderSettings(): Promise<void> {
     const ovRaw = (el.querySelector('#gate-override') as HTMLSelectElement).value;
     state.gateThresholdOverride = ovRaw === '' ? null : Number(ovRaw);
     await setSetting('gate_threshold_override', state.gateThresholdOverride);
+    state.judgeMode = (el.querySelector('#judge-mode') as HTMLSelectElement).value as JudgeMode;
+    await setSetting('judge_mode', state.judgeMode);
+    const lam = Number((el.querySelector('#verify-lambda') as HTMLInputElement).value);
+    if (Number.isFinite(lam) && lam >= 0 && lam <= 1) {
+      state.verifyLambda = lam;
+      await setSetting('verify_lambda', lam);
+    }
     const tau1 = Number((el.querySelector('#verify-tau1') as HTMLInputElement).value);
     const tau2 = Number((el.querySelector('#verify-tau2') as HTMLInputElement).value);
     if (Number.isFinite(tau1) && Number.isFinite(tau2) && tau1 > 0 && tau2 >= tau1) {
@@ -894,6 +926,8 @@ async function renderSettings(): Promise<void> {
         classGroup: group,
         gatePassThreshold: state.gateThresholdOverride ?? GATE_PASS_THRESHOLD[group],
         gateThresholdOverride: state.gateThresholdOverride,
+        judgeMode: state.judgeMode,
+        verifyLambda: state.verifyLambda,
         verifyTau1: state.verifyTau1,
         verifyTau2: state.verifyTau2,
       },

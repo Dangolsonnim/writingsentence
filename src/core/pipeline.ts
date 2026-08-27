@@ -11,7 +11,12 @@
 import { analyzeBlank, type BlankMetrics } from './blank';
 import type { Engines } from './engines';
 import type { Raster } from './raster';
-import { VERIFY_TAU1_DEFAULT, VERIFY_TAU2_DEFAULT, type VerifyResult } from './verify';
+import {
+  VERIFY_LAMBDA_DEFAULT,
+  VERIFY_TAU1_DEFAULT,
+  VERIFY_TAU2_DEFAULT,
+  type VerifyResult,
+} from './verify';
 import {
   detectArucoMarkers,
   homographyFromPoints,
@@ -29,10 +34,21 @@ export type SheetStatus =
 
 export type SlotStatus =
   | 'blank' // 아직 쓰지 않음 — 판정 아님
-  | 'gate_reject' // 명료성 미달 — 동기 부여 메시지
+  | 'gate_reject' // (gate 모드) 명료성 미달 — 동기 부여 메시지
+  | 'illegible' // (margin 모드) AI가 읽기 어려움 — 글씨체 안내
   | 'spell_unclear' // 철자 판정 유보(회색지대) — 재촬영 안내
   | 'spell_wrong' // 철자 오답 확정 — 자모 위치 안내
   | 'pass'; // 통과 — AR 실체화 + 칭찬
+
+/**
+ * 판정 모드 (2026-08-28 사용자 확정 — 게이트를 판정에서 제외):
+ * - 'margin'(기본): AI 읽기 신뢰도 기반. 통과 = conf ≥ λ AND M ≤ τ1.
+ *   인쇄체처럼 잘 읽히는 글씨 → 통과, 삐뚤삐뚤/판독 불가 → illegible.
+ *   게이트는 추론·로깅만 하고(지시문 §6 전 칸 기록 유지) 판정에 쓰지 않는다.
+ *   연출 등급: M ≤ 0.03 → 5 / ≤ 0.10 → 4 / ≤ τ1 → 3.
+ * - 'gate': 기존 게이트 등급 임계 방식(연구 비교용).
+ */
+export type JudgeMode = 'margin' | 'gate';
 
 export interface SlotJudgeResult {
   slotIndex: number; // 0-based
@@ -72,6 +88,9 @@ export interface SheetJudgeOptions {
   /** 철자 검증 임계 (설정값 — 파일럿에서 아동 필체로 재보정) */
   verifyTau1?: number;
   verifyTau2?: number;
+  /** 읽기 신뢰도 절대 임계 λ (margin 모드) */
+  verifyLambda?: number;
+  judgeMode?: JudgeMode; // 기본 'margin'
 }
 
 /** 라이브 AR 추적용: 마커 검출 + 기대 템플릿 매칭만 수행(판정 없음, 빠름) */
@@ -198,6 +217,7 @@ export async function judgeSheet(
     sr.gateGrade = gate.grade;
     sr.gateScore = gate.score;
 
+    const mode: JudgeMode = opt.judgeMode ?? 'margin';
     const alreadyPassed = opt.passedWords.has(slot.word_id);
     const gatePassed = gate.grade >= opt.gatePassThreshold;
     const escapeActive = opt.escapeActiveByWord[slot.word_id] === true;
@@ -205,24 +225,46 @@ export async function judgeSheet(
     else if (alreadyPassed || escapeActive) sr.gateDecision = 'override';
     else sr.gateDecision = 'reject';
 
-    if (sr.gateDecision === 'reject') {
+    if (mode === 'gate' && sr.gateDecision === 'reject') {
       sr.status = 'gate_reject'; // 품질 우선 — 미달 크롭의 검증/OCR은 신뢰 불가, 생략
       continue;
     }
 
-    // 철자 검증(강제 정렬 여유도) — 모든 판정 칸에 M 기록(지시문 §3)
+    // 철자·명료성 검증(읽기 신뢰도 + 강제 정렬 여유도) — 모든 판정 칸에 기록
     const tOcr = performance.now();
     sr.verify = await engines.verifier.verify(ocrCrop, slot.target_word, {
       tau1: opt.verifyTau1 ?? VERIFY_TAU1_DEFAULT,
       tau2: opt.verifyTau2 ?? VERIFY_TAU2_DEFAULT,
+      lambda: opt.verifyLambda ?? VERIFY_LAMBDA_DEFAULT,
     });
     sr.ocrMs = Math.round(performance.now() - tOcr);
 
-    if (alreadyPassed || sr.verify.decision === 'correct') {
-      // 통과(또는 통과 유지 — 검증 결과는 기록만)
+    if (mode === 'gate') {
+      if (alreadyPassed || sr.verify.decision === 'correct') {
+        sr.status = 'pass';
+        sr.rewardLevel = Math.min(5, Math.max(3, gate.grade));
+      } else if (sr.verify.decision === 'unclear') {
+        sr.status = 'spell_unclear';
+      } else {
+        sr.status = 'spell_wrong';
+      }
+      continue;
+    }
+
+    // margin 모드: 게이트는 위에서 로깅만 됨. 판정은 conf·M이 담당.
+    const v = sr.verify;
+    if (alreadyPassed || v.decision === 'correct') {
       sr.status = 'pass';
-      sr.rewardLevel = Math.min(5, Math.max(3, gate.grade));
-    } else if (sr.verify.decision === 'unclear') {
+      sr.rewardLevel = v.margin <= 0.03 ? 5 : v.margin <= 0.1 ? 4 : 3;
+      if (alreadyPassed && v.decision !== 'correct') sr.rewardLevel = 3;
+    } else if (escapeActive && v.decision === 'illegible') {
+      // 탈출구: 글씨체 미달 누적 3회 → override 통과 (철자 오답에는 미적용)
+      sr.gateDecision = 'override';
+      sr.status = 'pass';
+      sr.rewardLevel = 3;
+    } else if (v.decision === 'illegible') {
+      sr.status = 'illegible';
+    } else if (v.decision === 'unclear') {
       sr.status = 'spell_unclear';
     } else {
       sr.status = 'spell_wrong';

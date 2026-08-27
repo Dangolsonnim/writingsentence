@@ -18,20 +18,28 @@ import { lumaAt, type Raster } from './raster';
 
 export const VERIFY_TAU1_DEFAULT = 0.25;
 export const VERIFY_TAU2_DEFAULT = 0.45;
+/** 읽기 신뢰도(방출 토큰 geomean) 절대 임계 — 실측: 낙서 ≤0.26, 정상 글씨 ≥0.48 */
+export const VERIFY_LAMBDA_DEFAULT = 0.35;
 
-export type VerifyDecision = 'correct' | 'unclear' | 'wrong';
+export type VerifyDecision = 'correct' | 'unclear' | 'wrong' | 'illegible';
 
 export interface VerifyResult {
   margin: number;
   decision: VerifyDecision;
   tau1: number;
   tau2: number;
+  lambda: number;
   frames: number;
   /** 자유 복호 텍스트(로그용) */
   freeText: string;
+  /** 자유 복호 방출 토큰 신뢰도 geomean — 절대적 읽기 신뢰도(낙서 차단) */
+  freeConf: number;
   /** 오답 확정 시: 최고 점수 1-자모 이웃(학생이 쓴 것으로 추정)과 대조기 결과 */
   estimatedWritten: string | null;
+  /** 최고 이웃의 여유도 (free−bestNeighborForced)/T — 판독 가능 오답 vs 판독 불가 구분 */
+  bestNeighborMargin: number | null;
   jamo: CompareResult | null;
+  message: string | null;
 }
 
 const CHO = [...'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'];
@@ -178,6 +186,8 @@ export interface LogitsProvider {
 export interface VerifyOptions {
   tau1?: number;
   tau2?: number;
+  /** 읽기 신뢰도 절대 임계 (기본 0.35) */
+  lambda?: number;
   /** 오답 시 1-자모 이웃 탐색으로 위치 특정 (기본 true) */
   locateError?: boolean;
 }
@@ -258,10 +268,11 @@ export class SpellVerifier {
     this.composer = new HangulComposer(tokenizer.vocab);
   }
 
-  /** 크롭 1장 → logits 1회 추론 → M·판정(+오답 위치 특정) */
+  /** 크롭 1장 → logits 1회 추론 → conf·M 판정(+오답 위치 특정) */
   async verify(crop: Raster, targetWord: string, opt: VerifyOptions = {}): Promise<VerifyResult> {
     const tau1 = opt.tau1 ?? VERIFY_TAU1_DEFAULT;
     const tau2 = opt.tau2 ?? VERIFY_TAU2_DEFAULT;
+    const lambda = opt.lambda ?? VERIFY_LAMBDA_DEFAULT;
     const pre = preprocessForVerify(crop);
     const res = await this.runner.run(
       pre.data,
@@ -271,7 +282,7 @@ export class SpellVerifier {
     const frames = res.dims[1];
     const classes = res.dims[2];
     const lp = logSoftmax(res.data, frames, classes);
-    return this.judgeFromLogProbs(lp, frames, classes, targetWord, tau1, tau2, opt.locateError !== false);
+    return this.judgeFromLogProbs(lp, frames, classes, targetWord, tau1, tau2, lambda, opt.locateError !== false);
   }
 
   /** (골든 러너용) log-prob에서 M만 계산 */
@@ -282,6 +293,30 @@ export class SpellVerifier {
     return (free - forced) / frames;
   }
 
+  /** 자유 복호 방출 토큰 신뢰도 geomean (절대적 읽기 신뢰도) */
+  private freeConfidence(lp: Float64Array, frames: number, classes: number): number {
+    let sumLog = 0;
+    let n = 0;
+    let prev = -1;
+    for (let t = 0; t < frames; t++) {
+      const off = t * classes;
+      let best = 0;
+      let bestv = lp[off];
+      for (let k = 1; k < classes; k++) {
+        if (lp[off + k] > bestv) {
+          bestv = lp[off + k];
+          best = k;
+        }
+      }
+      if (best !== this.tokenizer.blankIndex && best !== prev) {
+        sumLog += Math.max(bestv, Math.log(1e-8));
+        n++;
+      }
+      prev = best;
+    }
+    return n === 0 ? 0 : Math.exp(sumLog / n);
+  }
+
   private judgeFromLogProbs(
     lp: Float64Array,
     frames: number,
@@ -289,6 +324,7 @@ export class SpellVerifier {
     targetWord: string,
     tau1: number,
     tau2: number,
+    lambda: number,
     locateError: boolean
   ): VerifyResult {
     const targetTokens = wordToTokens(targetWord);
@@ -296,20 +332,42 @@ export class SpellVerifier {
     const forced = ctcForced(lp, frames, classes, tokenIds(targetTokens, this.tokenizer), this.tokenizer.blankIndex);
     const margin = (free - forced) / frames;
     const freeText = greedyText(lp, frames, classes, this.tokenizer, this.composer);
+    const freeConf = this.freeConfidence(lp, frames, classes);
 
     const result: VerifyResult = {
       margin,
-      decision: margin <= tau1 ? 'correct' : margin <= tau2 ? 'unclear' : 'wrong',
+      decision: 'wrong',
       tau1,
       tau2,
+      lambda,
       frames,
       freeText,
+      freeConf,
       estimatedWritten: null,
+      bestNeighborMargin: null,
       jamo: null,
+      message: null,
     };
-    if (result.decision === 'correct') {
+
+    // 절대적 읽기 신뢰도: 낙서/판독 불가 글씨 차단 (M은 상대 여유도라 낙서에서 무력)
+    if (freeConf < lambda) {
+      result.decision = 'illegible';
+      result.message = '글자를 읽기 어려워요. 더 크고 반듯하게 써 볼까요?';
+      return result;
+    }
+    if (margin <= tau1) {
+      result.decision = 'correct';
       result.jamo = compare(targetWord, targetWord); // distance 0 (로그 일관성)
-    } else if (result.decision === 'wrong' && locateError) {
+      result.message = result.jamo.message;
+      return result;
+    }
+    if (margin <= tau2) {
+      result.decision = 'unclear';
+      result.message = '한 번만 더 또박또박 써서 찍어 볼까요?';
+      return result;
+    }
+    result.decision = 'wrong';
+    if (locateError) {
       // 1-자모 이웃 강제 정렬 — 최고 점수 이웃 = 학생이 쓴 것으로 추정
       let bestScore = -Infinity;
       let bestTokens: JamoToken[] | null = null;
@@ -320,10 +378,16 @@ export class SpellVerifier {
           bestTokens = v;
         }
       }
-      if (bestTokens) {
+      result.bestNeighborMargin = (free - bestScore) / frames;
+      if (bestTokens && result.bestNeighborMargin <= tau1) {
+        // 판독 가능한 1-자모 오답 — 위치 특정 문구
         const est = composeTokens(bestTokens, this.composer);
         result.estimatedWritten = est;
         result.jamo = compare(est, targetWord); // 대조기 = 추정 낱말 vs 정답 차이 문구 생성
+        result.message = result.jamo.message;
+      } else {
+        // 판독은 되지만 정답·이웃 모두에서 먼 큰 오류 — 대조기 강등 문구 스타일
+        result.message = `'${targetWord}'를 다시 한 번 잘 보고 처음부터 써 볼까요?`;
       }
     }
     return result;

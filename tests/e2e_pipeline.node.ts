@@ -1,13 +1,12 @@
 /**
- * 판정 분기 E2E — 웹판 v2 흐름(전체 학습지 1회 촬영 → 4칸 일괄 판정) +
- * 철자 검증 모드(지시문 §3: 통과 = 게이트 AND 강제 정렬 여유도 M ≤ τ1).
+ * 판정 분기 E2E — 웹판 v2 흐름 + margin 판정 모드(기본, 2026-08-28 사용자 확정:
+ * 게이트를 판정에서 제외하고 AI 읽기 신뢰도(conf)·강제 정렬 여유도(M)로 판정).
+ *   통과 = conf ≥ λ AND M ≤ τ1 (인쇄체처럼 잘 읽히는 글씨)
+ *   conf < λ → illegible (낙서/판독 불가 — 글씨체 안내)
+ *   읽히지만 M > τ2 → 1-자모 이웃 특정(철자 문구) 또는 '처음부터' 강등 문구
+ * gate 모드(기존 게이트 등급 임계)는 연구 비교용으로 유지·별도 검증.
  * 순수 Node 러너 (vitest 워커에서 opencv.js WASM이 크래시하여 별도 실행):
  *   npm run test:e2e
- *
- * 게이트 v1은 실제 연필 손글씨 캡처 도메인에 특화되어 합성 폰트 글씨를 저등급(0)으로
- * 거부한다(실물 크롭은 같은 파이프라인에서 4~5등급). 게이트 통과 경로는 실물 손글씨 크롭
- * 합성(p_real — 내용이 정답 낱말과 달라 검증 오답 경로도 겸함)으로, 탈출구·통과·철자
- * 분기는 폰트 시트(OCR이 정확히 읽는 실측 설정)로 시연한다.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -91,55 +90,61 @@ async function main(): Promise<void> {
     ...overrides,
   });
 
-  console.log('게이트 통과(실물 손글씨, 1번 칸) — 통과 + OCR 로그 산출:');
+  console.log('[margin] 인쇄체풍 정자(폰트 나무) → 게이트 무관 직접 통과:');
+  {
+    const r = await judgeSheet(loadPng(join(syn, 'p_namu.png')), engines, opts());
+    const s0 = r.slots[0];
+    console.log(
+      `  slot0=${s0.status} gate(참고)=${s0.gateGrade} conf=${s0.verify?.freeConf.toFixed(2)} M=${s0.verify?.margin.toFixed(3)} reward=${s0.rewardLevel}`
+    );
+    check('마커 4점 검출', r.status === 'ok' && r.markerFound === 4, r.markerDetail);
+    check('통과(게이트 0등급이어도)', s0.status === 'pass' && (s0.gateGrade ?? 9) <= 1);
+    check('연출 등급 5(M≈0)', s0.rewardLevel === 5);
+    check('게이트는 로깅됨(참고값)', s0.gateGrade !== null && s0.gateScore !== null);
+    check('나머지 칸 blank', r.slots.slice(1).every((sl) => sl.status === 'blank'));
+  }
+
+  console.log('[margin] 낙서 → illegible(읽기 신뢰도 차단) + 글씨체 안내:');
+  {
+    const r = await judgeSheet(loadPng(join(syn, 'p_scribble.png')), engines, opts());
+    const s0 = r.slots[0];
+    console.log(
+      `  slot0=${s0.status} conf=${s0.verify?.freeConf.toFixed(2)} M=${s0.verify?.margin.toFixed(3)} msg='${s0.verify?.message}'`
+    );
+    check('illegible', s0.status === 'illegible' && (s0.verify?.freeConf ?? 1) < 0.35);
+    check('글씨체 안내 문구', (s0.verify?.message ?? '').includes('반듯'));
+  }
+
+  console.log('[margin] 판독 가능한 큰 오류(실물 로봇 명령 vs 나무) → 처음부터 문구:');
   {
     const r = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts());
     const s0 = r.slots[0];
     console.log(
-      `  sheet=${r.status} slot0=${s0.status} grade=${s0.gateGrade} M=${s0.verify?.margin.toFixed(3)} free='${s0.verify?.freeText}' est='${s0.verify?.estimatedWritten}' msg='${s0.verify?.jamo?.message}' scan=${r.scanMs}ms`
+      `  slot0=${s0.status} conf=${s0.verify?.freeConf.toFixed(2)} M=${s0.verify?.margin.toFixed(3)} M_best=${s0.verify?.bestNeighborMargin?.toFixed(3)} msg='${s0.verify?.message}'`
     );
-    check('마커 4점 검출', r.status === 'ok' && r.markerFound === 4, r.markerDetail);
-    check('slot0 게이트 통과(등급≥3)', (s0.gateGrade ?? 0) >= 3 && s0.gateDecision === 'pass');
-    check('검증: 다른 낱말 → M > τ2 → spell_wrong', s0.status === 'spell_wrong' && (s0.verify?.margin ?? 0) > 0.45);
-    check('오답 위치 특정: 추정 낱말 + 대조기 문구', !!s0.verify?.estimatedWritten && !!s0.verify?.jamo?.message);
-    check('나머지 칸 blank', r.slots.slice(1).every((s) => s.status === 'blank'));
+    check('spell_wrong(큰 오류)', s0.status === 'spell_wrong');
+    check('처음부터 강등 문구', (s0.verify?.message ?? '').includes('처음부터'));
   }
 
-  console.log('품질 미달(폰트/낙서) → gate_reject, OCR 생략(품질 우선):');
-  {
-    const r = await judgeSheet(loadPng(join(syn, 'p_namu.png')), engines, opts());
-    const s0 = r.slots[0];
-    console.log(`  slot0=${s0.status} grade=${s0.gateGrade}`);
-    check('폰트: gate_reject + 검증 생략(품질 우선)', s0.status === 'gate_reject' && s0.verify === null);
-    const r2 = await judgeSheet(loadPng(join(syn, 'p_scribble.png')), engines, opts());
-    const t0 = r2.slots[0];
-    console.log(`  낙서 slot0=${t0.status} grade=${t0.gateGrade} score=${t0.gateScore?.toFixed(3)}`);
-    check('낙서: gate_reject', t0.status === 'gate_reject' && t0.gateDecision === 'reject');
-  }
-
-  console.log('탈출구: REJECT 3회 누적 후 override 통과(연출 3):');
+  console.log('[margin] 탈출구: illegible 누적 3회 → override 통과(연출 3):');
   {
     const r = await judgeSheet(
-      loadPng(join(syn, 'p_namu.png')),
+      loadPng(join(syn, 'p_scribble.png')),
       engines,
       opts({ escapeActiveByWord: { D1W1: true } })
     );
     const s0 = r.slots[0];
-    console.log(`  slot0=${s0.status} decision=${s0.gateDecision} reward=${s0.rewardLevel} M=${s0.verify?.margin.toFixed(3)} free='${s0.verify?.freeText}'`);
-    check('override + 검증 정답(M ≤ τ1) → pass', s0.status === 'pass' && s0.gateDecision === 'override' && s0.verify?.decision === 'correct');
+    console.log(`  slot0=${s0.status} decision=${s0.gateDecision} reward=${s0.rewardLevel}`);
+    check('override → pass', s0.status === 'pass' && s0.gateDecision === 'override');
     check('override 연출 등급 3', s0.rewardLevel === 3);
   }
 
-  console.log('1-자모 오답: 나모(폰트) vs 정답 나무 — 기본 임계 + 임계 분기 강제:');
+  console.log('[margin] 1-자모 오답: 나모(폰트) vs 정답 나무 — 기본 임계 + 임계 분기 강제:');
   {
     // 기본 τ(0.25/0.45): 도메인평가_결과.md §4의 예고대로 또박또박 쓴 1-자모 오답은
     // M이 중간(실측 0.21 부근)에 와 τ1 아래로 들어올 수 있다 — 판정은 임계 일관성만 확인,
     // M 연속값 로깅이 파일럿 재보정 재료(전 칸 기록).
-    const rDef = await judgeSheet(
-      loadPng(join(syn, 'p_namo.png')),
-      engines,
-      opts({ escapeActiveByWord: { D1W1: true } })
-    );
+    const rDef = await judgeSheet(loadPng(join(syn, 'p_namo.png')), engines, opts());
     const d0 = rDef.slots[0];
     const m = d0.verify?.margin ?? NaN;
     console.log(`  [기본 τ] slot0=${d0.status} M=${m.toFixed(3)} free='${d0.verify?.freeText}'`);
@@ -151,7 +156,7 @@ async function main(): Promise<void> {
     const rUn = await judgeSheet(
       loadPng(join(syn, 'p_namo.png')),
       engines,
-      opts({ escapeActiveByWord: { D1W1: true }, verifyTau1: 0.05, verifyTau2: 0.3 })
+      opts({ verifyTau1: 0.05, verifyTau2: 0.3 })
     );
     console.log(`  [τ=0.05/0.3] slot0=${rUn.slots[0].status}`);
     check('판정 유보(spell_unclear) 분기', rUn.slots[0].status === 'spell_unclear');
@@ -160,7 +165,7 @@ async function main(): Promise<void> {
     const rWr = await judgeSheet(
       loadPng(join(syn, 'p_namo.png')),
       engines,
-      opts({ escapeActiveByWord: { D1W1: true }, verifyTau1: 0.05, verifyTau2: 0.15 })
+      opts({ verifyTau1: 0.05, verifyTau2: 0.15 })
     );
     const w0 = rWr.slots[0];
     console.log(
@@ -191,19 +196,14 @@ async function main(): Promise<void> {
     check('전 칸 게이트 무기록(공백)', r.slots.every((s) => s.gateGrade === null));
   }
 
-  console.log('전체 시트(4칸 기입) + 탈출구 전체 → 4칸 모두 통과:');
+  console.log('[margin] 전체 시트(4칸 기입) → 탈출구 없이 4칸 모두 직접 통과:');
   {
-    const escape = Object.fromEntries(templates[0].note_slots.map((s) => [s.word_id, true]));
-    const r = await judgeSheet(
-      loadPng(join(syn, 'p_full_t1.png')),
-      engines,
-      opts({ escapeActiveByWord: escape })
-    );
+    const r = await judgeSheet(loadPng(join(syn, 'p_full_t1.png')), engines, opts());
     console.log(
-      '  ' + r.slots.map((s) => `${s.wordId}:${s.status}(g${s.gateGrade},M=${s.verify?.margin.toFixed(3)})`).join(' ')
+      '  ' + r.slots.map((s) => `${s.wordId}:${s.status}(g${s.gateGrade},conf=${s.verify?.freeConf.toFixed(2)},M=${s.verify?.margin.toFixed(3)},lv${s.rewardLevel})`).join(' ')
     );
-    check('4칸 모두 pass(검증 정답)', r.slots.every((s) => s.status === 'pass' && s.verify?.decision === 'correct'));
-    check('전 칸 gate_grade·M 기록', r.slots.every((s) => s.gateGrade !== null && s.verify !== null));
+    check('4칸 모두 pass(검증 정답, 탈출구 불필요)', r.slots.every((s) => s.status === 'pass' && s.verify?.decision === 'correct' && s.gateDecision !== 'override'));
+    check('전 칸 gate_grade·M·conf 기록', r.slots.every((s) => s.gateGrade !== null && s.verify !== null));
   }
 
   console.log('다른 차시 학습지 → wrong_template:');
@@ -213,10 +213,20 @@ async function main(): Promise<void> {
     check('wrong_template', r.status === 'wrong_template' && r.detectedTemplateId === 'DICT_02_v1');
   }
 
-  console.log('임계 차등 A(4)/B(3):');
+  console.log('[gate 모드] 기존 게이트 판정 경로 회귀 확인:');
   {
-    const rB = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts({ gatePassThreshold: 3 }));
-    const rA = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts({ gatePassThreshold: 4 }));
+    // 게이트 등급 임계 방식이 설정으로 복원 가능해야 함(연구 비교용)
+    const rejected = await judgeSheet(
+      loadPng(join(syn, 'p_namu.png')),
+      engines,
+      opts({ judgeMode: 'gate' })
+    );
+    const g0 = rejected.slots[0];
+    console.log(`  폰트 나무(gate): ${g0.status} grade=${g0.gateGrade}`);
+    check('gate 모드: 저등급 → gate_reject + 검증 생략', g0.status === 'gate_reject' && g0.verify === null);
+
+    const rB = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts({ judgeMode: 'gate', gatePassThreshold: 3 }));
+    const rA = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts({ judgeMode: 'gate', gatePassThreshold: 4 }));
     const a0 = rA.slots[0];
     const b0 = rB.slots[0];
     console.log(`  A: decision=${a0.gateDecision} grade=${a0.gateGrade} / B: decision=${b0.gateDecision}`);
