@@ -40,6 +40,7 @@ import {
   startUploader,
 } from './logging/packager';
 import { cueStill, playCollection, type RewardHandle } from './three/stage';
+import { VERIFY_TAU1_DEFAULT, VERIFY_TAU2_DEFAULT } from './core/verify';
 import { LiveArView, type ArSlotDisplay } from './ui/live_ar';
 
 const DEFAULT_PIN = '7391';
@@ -57,6 +58,8 @@ interface AppState {
   engines: Engines | null;
   templates: DictTemplate[];
   classGroup: ClassGroup;
+  verifyTau1: number;
+  verifyTau2: number;
   participant: ParticipantRow | null;
   session: SessionRow | null;
   template: DictTemplate | null;
@@ -71,6 +74,8 @@ const state: AppState = {
   engines: null,
   templates: [],
   classGroup: 'B',
+  verifyTau1: VERIFY_TAU1_DEFAULT,
+  verifyTau2: VERIFY_TAU2_DEFAULT,
   participant: null,
   session: null,
   template: null,
@@ -84,6 +89,8 @@ export async function startApp(root: HTMLElement): Promise<void> {
   state.root = root;
   showOverlay('준비 중이에요…');
   state.classGroup = (await getSetting<ClassGroup>('class_group', 'B')) as ClassGroup;
+  state.verifyTau1 = await getSetting('verify_tau1', VERIFY_TAU1_DEFAULT);
+  state.verifyTau2 = await getSetting('verify_tau2', VERIFY_TAU2_DEFAULT);
   const [templates] = await Promise.all([loadAllTemplates(import.meta.env.BASE_URL), initCv()]);
   state.templates = templates;
   state.engines = await loadEngines((msg) => showOverlay(msg));
@@ -227,6 +234,8 @@ async function beginSession(template: DictTemplate): Promise<void> {
     class_group: state.classGroup,
     gate_pass_threshold: GATE_PASS_THRESHOLD[state.classGroup],
     gate_model_version: GATE_MODEL_VERSION,
+    verify_tau1: state.verifyTau1,
+    verify_tau2: state.verifyTau2,
   };
   state.session = session;
   state.template = template;
@@ -368,6 +377,8 @@ async function handleCapture(
       escapeActiveByWord,
       passedWords: passedBefore,
       allTemplates: state.templates,
+      verifyTau1: state.verifyTau1,
+      verifyTau2: state.verifyTau2,
     });
 
     const feedback = document.querySelector('#sheet-feedback');
@@ -437,8 +448,16 @@ function bubbleMessage(sr: SlotJudgeResult, w: WordProgress, escapeActive: boole
     }
     return '멋진 글자예요!';
   }
-  if (sr.status === 'blank') return '여기에 낱말을 써 보세요';
-  return '좀 더 바르게 써볼까요?';
+  switch (sr.status) {
+    case 'blank':
+      return '여기에 낱말을 써 보세요';
+    case 'spell_unclear':
+      return '한 번만 더 또박또박 써서 찍어 볼까요?';
+    case 'spell_wrong':
+      return sr.verify?.jamo?.message ?? '다시 한 번 잘 보고 써 볼까요?';
+    default:
+      return '좀 더 바르게 써볼까요?';
+  }
 }
 
 /* ───────── 유틸: 이미지 ───────── */
@@ -562,7 +581,7 @@ async function recordCapture(
       slot_index: sr.slotIndex + 1,
       slot_id: String(slot.slot_id),
       is_blank: sr.status === 'blank',
-      skipped_before_ocr: sr.ocr === null,
+      skipped_before_ocr: sr.verify === null,
       blank_source: sr.blank ? 'local' : null,
       local_blank: sr.blank?.localBlank ?? null,
       blank_score: sr.blank?.blankScore ?? null,
@@ -576,14 +595,17 @@ async function recordCapture(
       crop_width: cropW,
       crop_height: cropH,
       crop_sha256: cropSha,
-      ocr_started_at: sr.ocr ? now - sr.ocrMs : null,
-      ocr_completed_at: sr.ocr ? now : null,
-      ocr_success: sr.ocr !== null,
-      ocr_service: sr.ocr ? OCR_SERVICE : null,
+      ocr_started_at: sr.verify ? now - sr.ocrMs : null,
+      ocr_completed_at: sr.verify ? now : null,
+      ocr_success: sr.verify !== null,
+      ocr_service: sr.verify ? OCR_SERVICE : null,
       ocr_model_version: 'crnn_jamo_no_null',
-      ocr_raw_text: sr.ocr?.text ?? null,
-      ocr_normalized_text: sr.ocr ? sr.ocr.text.normalize('NFC').replace(/[ 　]/g, '') : null,
-      ocr_confidence: sr.ocr?.confidence ?? null,
+      ocr_raw_text: sr.verify?.freeText ?? null,
+      ocr_normalized_text: sr.verify
+        ? sr.verify.freeText.normalize('NFC').replace(/[ 　]/g, '')
+        : null,
+      ocr_confidence: null, // 검증 모드 — 신뢰 지표는 verify_margin
+
       gate_score: sr.gateScore,
       gate_grade: sr.gateGrade,
       gate_decision: sr.gateDecision,
@@ -597,11 +619,11 @@ async function recordCapture(
       target_word: slot.target_word,
       gate_pass_threshold: session.gate_pass_threshold,
       class_group: session.class_group,
-      // 철자는 판정 미사용 — 아래 3필드는 연구 로그용(웹판 v2)
-      jamo_edit_distance: sr.jamo?.distance ?? null,
-      wrong_jamo_positions: sr.jamo
+      // 철자 = 검증 모드: jamo 필드는 오답 확정 시 '추정 낱말 vs 정답' 대조기 결과
+      jamo_edit_distance: sr.verify?.jamo?.distance ?? null,
+      wrong_jamo_positions: sr.verify?.jamo
         ? JSON.stringify(
-            sr.jamo.errors.map((e) => ({
+            sr.verify.jamo.errors.map((e) => ({
               syllable_index: e.syllable_index,
               role: e.role,
               expected: e.expected,
@@ -610,7 +632,12 @@ async function recordCapture(
             }))
           )
         : null,
-      spelling_correct: sr.jamo?.correct ?? null,
+      spelling_correct: sr.verify ? sr.verify.decision === 'correct' : null,
+      verify_margin: sr.verify?.margin ?? null,
+      verify_decision: sr.verify?.decision ?? null,
+      verify_tau1: sr.verify?.tau1 ?? null,
+      verify_tau2: sr.verify?.tau2 ?? null,
+      estimated_written: sr.verify?.estimatedWritten ?? null,
       reward_level: sr.status === 'pass' ? sr.rewardLevel : 0,
       retry_index: state.captureIndex,
       escape_used:
@@ -732,6 +759,8 @@ async function renderSettings(): Promise<void> {
             <option value="B">B반 — 임계 3</option>
           </select>
         </div>
+        <div class="field"><label>철자 검증 임계 τ1 (정답, 기본 0.25)</label><input id="verify-tau1" type="number" step="0.01" min="0" max="2" ${sessionActive ? 'disabled' : ''} /></div>
+        <div class="field"><label>철자 검증 임계 τ2 (유보 상한, 기본 0.45)</label><input id="verify-tau2" type="number" step="0.01" min="0" max="2" ${sessionActive ? 'disabled' : ''} /></div>
         <div class="field"><label>업로드 함수 URL</label><input id="upload-url" ${sessionActive ? 'disabled' : ''} /></div>
         <div class="field"><label>업로드 토큰</label><input id="upload-token" type="password" ${sessionActive ? 'disabled' : ''} /></div>
         <button class="big-btn" id="btn-save" ${sessionActive ? 'disabled' : ''}>저장</button>
@@ -760,18 +789,35 @@ async function renderSettings(): Promise<void> {
       <button class="big-btn ghost" id="btn-close">닫기</button>
     </div>`);
   (el.querySelector('#class-group') as HTMLSelectElement).value = state.classGroup;
+  (el.querySelector('#verify-tau1') as HTMLInputElement).value = String(state.verifyTau1);
+  (el.querySelector('#verify-tau2') as HTMLInputElement).value = String(state.verifyTau2);
   (el.querySelector('#upload-url') as HTMLInputElement).value = cfg.functionUrl;
   (el.querySelector('#upload-token') as HTMLInputElement).value = cfg.token;
   el.querySelector('#btn-save')!.addEventListener('click', async () => {
     const group = (el.querySelector('#class-group') as HTMLSelectElement).value as ClassGroup;
     state.classGroup = group;
+    const tau1 = Number((el.querySelector('#verify-tau1') as HTMLInputElement).value);
+    const tau2 = Number((el.querySelector('#verify-tau2') as HTMLInputElement).value);
+    if (Number.isFinite(tau1) && Number.isFinite(tau2) && tau1 > 0 && tau2 >= tau1) {
+      state.verifyTau1 = tau1;
+      state.verifyTau2 = tau2;
+      await setSetting('verify_tau1', tau1);
+      await setSetting('verify_tau2', tau2);
+    } else {
+      window.alert('임계값이 올바르지 않아 τ1/τ2는 저장하지 않았습니다 (0 < τ1 ≤ τ2).');
+    }
     await setSetting('class_group', group);
     await setUploadConfig({
       functionUrl: (el.querySelector('#upload-url') as HTMLInputElement).value.trim(),
       token: (el.querySelector('#upload-token') as HTMLInputElement).value.trim(),
     });
     await logEvent('settings_changed', {
-      payload: { classGroup: group, gatePassThreshold: GATE_PASS_THRESHOLD[group] },
+      payload: {
+        classGroup: group,
+        gatePassThreshold: GATE_PASS_THRESHOLD[group],
+        verifyTau1: state.verifyTau1,
+        verifyTau2: state.verifyTau2,
+      },
     });
     window.alert('저장했습니다.');
   });

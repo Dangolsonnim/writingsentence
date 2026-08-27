@@ -3,10 +3,12 @@ import * as ort from 'onnxruntime-web/wasm';
 import { CrnnTokenizer } from './hangul';
 import { GateEngine, type GateRunner } from './gate';
 import { OcrEngine, type OcrRunner } from './ocr';
+import { SpellVerifier } from './verify';
 
 export interface Engines {
   gate: GateEngine;
   ocr: OcrEngine;
+  verifier: SpellVerifier;
   tokenizer: CrnnTokenizer;
 }
 
@@ -56,6 +58,7 @@ async function doLoad(onProgress?: (msg: string) => void): Promise<Engines> {
   return {
     gate: new GateEngine(gateRunner),
     ocr: new OcrEngine(ocrRunner, new CrnnTokenizer(tokenizer.vocab, tokenizer.blankIndex)),
+    verifier: new SpellVerifier(ocrRunner, tokenizer),
     tokenizer,
   };
 }

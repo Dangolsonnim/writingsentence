@@ -51,6 +51,8 @@ export interface SessionRow {
   class_group: string;
   gate_pass_threshold: number;
   gate_model_version: string;
+  verify_tau1: number;
+  verify_tau2: number;
 }
 
 export interface AttemptRow {
@@ -99,6 +101,12 @@ export interface AttemptRow {
   jamo_edit_distance: number | null;
   wrong_jamo_positions: string | null; // JSON
   spelling_correct: boolean | null;
+  // ── 철자 검증 모드 (지시문 §3, 2026-08-27 도메인 평가 확정) ──
+  verify_margin: number | null; // 강제 정렬 여유도 M (전 판정 칸 기록)
+  verify_decision: string | null; // correct | unclear | wrong
+  verify_tau1: number | null;
+  verify_tau2: number | null;
+  estimated_written: string | null; // 오답 확정 시 1-자모 이웃 추정 낱말
   reward_level: number; // 0/3/4/5
   retry_index: number;
   escape_used: boolean;

@@ -252,15 +252,17 @@ export class LiveArView {
     if (this.homography && this.sourceW > 0) {
       for (const v of this.visuals) {
         const slot = this.template.note_slots[v.display.slotIndex];
-        const [sx, sy, sw, sh] = slot.rect_mm;
-        const pTL = projectPoint(this.homography, sx, sy);
-        const pTR = projectPoint(this.homography, sx + sw, sy);
-        const pC = projectPoint(this.homography, sx + sw / 2, sy + sh / 2);
+        // 통과(사물 표시) → 그림 단서 이미지(cue_rect_mm) 위에 앵커링,
+        // 미달(말풍선만) → 글씨 칸(rect_mm) 위에 안내 (사용자 확정 2026-08-27)
+        const [ax, ay, aw, ah] = v.display.passed ? slot.cue_rect_mm : slot.rect_mm;
+        const pTL = projectPoint(this.homography, ax, ay);
+        const pTR = projectPoint(this.homography, ax + aw, ay);
+        const pC = projectPoint(this.homography, ax + aw / 2, ay + ah / 2);
         const sTL = this.toScreen(pTL.x, pTL.y, cw, ch);
         const sTR = this.toScreen(pTR.x, pTR.y, cw, ch);
         const sC = this.toScreen(pC.x, pC.y, cw, ch);
-        const slotW = Math.hypot(sTR.x - sTL.x, sTR.y - sTL.y);
-        const target = { cx: sC.x, cy: Math.min(sTL.y, sTR.y), w: slotW };
+        const boxW = Math.hypot(sTR.x - sTL.x, sTR.y - sTL.y);
+        const target = { cx: sC.x, cy: sC.y, w: boxW };
         if (!v.smooth) v.smooth = { ...target };
         else {
           v.smooth.cx += (target.cx - v.smooth.cx) * 0.35;
@@ -269,26 +271,30 @@ export class LiveArView {
         }
         const { cx, cy, w } = v.smooth;
 
-        // 말풍선: 칸 위쪽에 고정 (통과=사물 옆, 미달=칸 바로 위)
-        const unit = w * 0.11; // 3D 1유닛 ≈ 칸 폭의 11%
-        const objHeightPx = unit * 2.2;
-        const bubbleY = v.display.passed ? cy - objHeightPx - 8 : cy - 8;
         v.bubble.style.opacity = fresh ? '1' : '0';
-        v.bubble.style.transform = `translate(-50%, -100%) translate(${cx + (v.display.passed ? w * 0.28 : 0)}px, ${Math.max(30, bubbleY)}px)`;
-
-        if (v.scene) {
-          const g = v.scene.group;
-          g.visible = fresh;
-          // 스케일 팝 등장 0.3s (등급 3+ 공통)
-          const p = Math.min(1, t / 0.3);
-          const pop = p < 1 ? 1.15 * p * (2 - p) : 1;
-          g.scale.setScalar(unit * pop);
-          g.position.set(cx, ch - cy + 4, 0); // y-up 변환, 칸 상단에 바닥 정렬
-          if (v.display.rewardLevel >= 4 && t > 0.35) v.scene.animate(t - 0.35);
-          if (v.sparkle && v.sparkleMat) {
-            v.sparkle.rotation.y = t * 0.7;
-            v.sparkleMat.opacity = 0.55 + Math.sin(t * 8) * 0.4;
+        if (v.display.passed) {
+          // 사물이 단서 그림 위에 서고, 말풍선은 사물 오른쪽 옆
+          const unit = w * 0.38; // 3D 1유닛 ≈ 단서 그림 폭의 38% (사물 높이 ~2유닛)
+          const objTopY = cy - unit * 2.1;
+          v.bubble.style.transform = `translate(0, -50%) translate(${cx + w * 0.75}px, ${Math.max(30, objTopY + unit * 0.8)}px)`;
+          if (v.scene) {
+            const g = v.scene.group;
+            g.visible = fresh;
+            // 스케일 팝 등장 0.3s (등급 3+ 공통)
+            const p = Math.min(1, t / 0.3);
+            const pop = p < 1 ? 1.15 * p * (2 - p) : 1;
+            g.scale.setScalar(unit * pop);
+            g.position.set(cx, ch - cy - unit * 0.1, 0); // y-up 변환, 단서 그림 중앙에 바닥 정렬
+            if (v.display.rewardLevel >= 4 && t > 0.35) v.scene.animate(t - 0.35);
+            if (v.sparkle && v.sparkleMat) {
+              v.sparkle.rotation.y = t * 0.7;
+              v.sparkleMat.opacity = 0.55 + Math.sin(t * 8) * 0.4;
+            }
           }
+        } else {
+          // 안내 말풍선: 글씨 칸 바로 위 중앙
+          const topY = Math.min(sTL.y, sTR.y);
+          v.bubble.style.transform = `translate(-50%, -100%) translate(${cx}px, ${Math.max(30, topY - 6)}px)`;
         }
       }
     } else {
