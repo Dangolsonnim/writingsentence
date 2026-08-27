@@ -61,6 +61,8 @@ interface AppState {
   classGroup: ClassGroup;
   verifyTau1: number;
   verifyTau2: number;
+  /** 연구자용 게이트 임계 수동 조정(null=학급 규칙 A=4/B=3) — 테스트·파일럿 보정용 */
+  gateThresholdOverride: number | null;
   participant: ParticipantRow | null;
   session: SessionRow | null;
   template: DictTemplate | null;
@@ -77,6 +79,7 @@ const state: AppState = {
   classGroup: 'B',
   verifyTau1: VERIFY_TAU1_DEFAULT,
   verifyTau2: VERIFY_TAU2_DEFAULT,
+  gateThresholdOverride: null,
   participant: null,
   session: null,
   template: null,
@@ -92,6 +95,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
   state.classGroup = (await getSetting<ClassGroup>('class_group', 'B')) as ClassGroup;
   state.verifyTau1 = await getSetting('verify_tau1', VERIFY_TAU1_DEFAULT);
   state.verifyTau2 = await getSetting('verify_tau2', VERIFY_TAU2_DEFAULT);
+  state.gateThresholdOverride = await getSetting<number | null>('gate_threshold_override', null);
   const [templates] = await Promise.all([loadAllTemplates(import.meta.env.BASE_URL), initCv()]);
   state.templates = templates;
   state.engines = await loadEngines((msg) => showOverlay(msg));
@@ -233,7 +237,7 @@ async function beginSession(template: DictTemplate): Promise<void> {
     content_type: 'dictation',
     template_id: template.template_id,
     class_group: state.classGroup,
-    gate_pass_threshold: GATE_PASS_THRESHOLD[state.classGroup],
+    gate_pass_threshold: state.gateThresholdOverride ?? GATE_PASS_THRESHOLD[state.classGroup],
     gate_model_version: GATE_MODEL_VERSION,
     verify_tau1: state.verifyTau1,
     verify_tau2: state.verifyTau2,
@@ -469,11 +473,15 @@ async function handleCapture(
       state.ar?.showStatic(scaled, result.homography);
     }
     state.ar?.setResults(displays);
+    const total = state.words.length;
     const passCount = state.words.filter((w) => w.passed).length;
     statusEl.textContent =
-      passCount === state.words.length
-        ? '와, 네 낱말 모두 멋져요!'
-        : `멋진 낱말 ${passCount}개! 나머지도 고쳐 써 볼까요?`;
+      passCount === total
+        ? `${passCount}/${total} 개를 바르게 썼어요! 참 잘했어요!`
+        : `${passCount}/${total} 개를 바르게 썼어요!`;
+    if (result.slots.some((sr) => sr.status === 'pass')) {
+      state.ar?.celebrate(); // 하나라도 통과 → 폭죽 (2026-08-27 사용자 요청)
+    }
     refreshButtons();
   } catch (e) {
     hideOverlay();
@@ -812,6 +820,16 @@ async function renderSettings(): Promise<void> {
             <option value="B">B반 — 임계 3</option>
           </select>
         </div>
+        <div class="field"><label>게이트 임계 조정 (연구자 테스트용 — 기본: 학급 규칙)</label>
+          <select id="gate-override" ${sessionActive ? 'disabled' : ''}>
+            <option value="">학급 규칙 (A=4 / B=3)</option>
+            <option value="1">1 (매우 완화 — 테스트용)</option>
+            <option value="2">2 (완화)</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5 (엄격)</option>
+          </select>
+        </div>
         <div class="field"><label>철자 검증 임계 τ1 (정답, 기본 0.25)</label><input id="verify-tau1" type="number" step="0.01" min="0" max="2" ${sessionActive ? 'disabled' : ''} /></div>
         <div class="field"><label>철자 검증 임계 τ2 (유보 상한, 기본 0.45)</label><input id="verify-tau2" type="number" step="0.01" min="0" max="2" ${sessionActive ? 'disabled' : ''} /></div>
         <div class="field"><label>업로드 함수 URL</label><input id="upload-url" ${sessionActive ? 'disabled' : ''} /></div>
@@ -844,6 +862,8 @@ async function renderSettings(): Promise<void> {
       <button class="big-btn ghost" id="btn-close">닫기</button>
     </div>`);
   (el.querySelector('#class-group') as HTMLSelectElement).value = state.classGroup;
+  (el.querySelector('#gate-override') as HTMLSelectElement).value =
+    state.gateThresholdOverride === null ? '' : String(state.gateThresholdOverride);
   (el.querySelector('#verify-tau1') as HTMLInputElement).value = String(state.verifyTau1);
   (el.querySelector('#verify-tau2') as HTMLInputElement).value = String(state.verifyTau2);
   (el.querySelector('#upload-url') as HTMLInputElement).value = cfg.functionUrl;
@@ -851,6 +871,9 @@ async function renderSettings(): Promise<void> {
   el.querySelector('#btn-save')!.addEventListener('click', async () => {
     const group = (el.querySelector('#class-group') as HTMLSelectElement).value as ClassGroup;
     state.classGroup = group;
+    const ovRaw = (el.querySelector('#gate-override') as HTMLSelectElement).value;
+    state.gateThresholdOverride = ovRaw === '' ? null : Number(ovRaw);
+    await setSetting('gate_threshold_override', state.gateThresholdOverride);
     const tau1 = Number((el.querySelector('#verify-tau1') as HTMLInputElement).value);
     const tau2 = Number((el.querySelector('#verify-tau2') as HTMLInputElement).value);
     if (Number.isFinite(tau1) && Number.isFinite(tau2) && tau1 > 0 && tau2 >= tau1) {
@@ -869,7 +892,8 @@ async function renderSettings(): Promise<void> {
     await logEvent('settings_changed', {
       payload: {
         classGroup: group,
-        gatePassThreshold: GATE_PASS_THRESHOLD[group],
+        gatePassThreshold: state.gateThresholdOverride ?? GATE_PASS_THRESHOLD[group],
+        gateThresholdOverride: state.gateThresholdOverride,
         verifyTau1: state.verifyTau1,
         verifyTau2: state.verifyTau2,
       },

@@ -50,6 +50,12 @@ export class LiveArView {
   private visuals: SlotVisual[] = [];
   private startTime = performance.now();
   private staticMode = false;
+  private fireworks: Array<{
+    points: THREE.Points;
+    mat: THREE.PointsMaterial;
+    vel: Float32Array;
+    born: number;
+  }> = [];
 
   /** 추적 상태 콜백 (마커 수, 다른 차시 감지) */
   onTrack: ((found: number, wrongTemplateId: string | null) => void) | null = null;
@@ -173,6 +179,67 @@ export class LiveArView {
 
   clearResults(): void {
     this.clearVisuals();
+  }
+
+  /** 폭죽 연출 — 촬영 결과에 통과 낱말이 하나라도 있을 때 (2026-08-27 사용자 요청) */
+  celebrate(bursts = 4): void {
+    const cw = this.container.clientWidth || 320;
+    const ch = this.container.clientHeight || 240;
+    const colors = [0xffd23f, 0xff7eb6, 0x3a86ff, 0x2e9e46, 0xff8c42];
+    for (let b = 0; b < bursts; b++) {
+      const cx = cw * (0.2 + Math.random() * 0.6);
+      const cy = ch * (0.35 + Math.random() * 0.35); // world y (아래=0)
+      const n = 70;
+      const pos = new Float32Array(n * 3);
+      const vel = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        pos[i * 3] = cx;
+        pos[i * 3 + 1] = cy;
+        pos[i * 3 + 2] = 5;
+        const a = Math.random() * Math.PI * 2;
+        const sp = (0.35 + Math.random() * 0.65) * Math.min(cw, ch) * 0.55;
+        vel[i * 2] = Math.cos(a) * sp;
+        vel[i * 2 + 1] = Math.sin(a) * sp;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({
+        color: colors[b % colors.length],
+        size: Math.max(4, ch * 0.012),
+        transparent: true,
+        opacity: 1,
+      });
+      const points = new THREE.Points(geo, mat);
+      this.scene3.add(points);
+      this.fireworks.push({ points, mat, vel, born: performance.now() + b * 180 });
+    }
+    playSparkleSound();
+  }
+
+  private updateFireworks(): void {
+    const now = performance.now();
+    const GRAV = -(this.container.clientHeight || 240) * 0.6;
+    this.fireworks = this.fireworks.filter((f) => {
+      const age = (now - f.born) / 1000;
+      if (age < 0) return true; // 시차 시작 대기
+      if (age > 1.7) {
+        this.scene3.remove(f.points);
+        f.points.geometry.dispose();
+        f.mat.dispose();
+        return false;
+      }
+      const pos = f.points.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const arr = pos.array as Float32Array;
+      const n = arr.length / 3;
+      const dt = 1 / 60; // 증분 적분(rAF 근사) + 중력
+      for (let i = 0; i < n; i++) {
+        arr[i * 3] += f.vel[i * 2] * dt;
+        arr[i * 3 + 1] += (f.vel[i * 2 + 1] + GRAV * age) * dt;
+      }
+      pos.needsUpdate = true;
+      f.mat.opacity = Math.max(0, 1 - age / 1.7);
+      return true;
+    });
   }
 
   private clearVisuals(): void {
@@ -303,6 +370,7 @@ export class LiveArView {
         if (v.scene) v.scene.group.visible = false;
       }
     }
+    this.updateFireworks();
     this.renderer!.render(this.scene3, this.camera);
   }
 
