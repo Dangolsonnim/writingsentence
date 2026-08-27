@@ -231,6 +231,22 @@ export async function getSession(sessionId: string): Promise<SessionRow | undefi
   return get<SessionRow>('sessions', sessionId);
 }
 
+/** 최근 시도 N건 + 크롭 asset (진단 화면용) */
+export async function listRecentAttempts(
+  limit: number
+): Promise<Array<{ attempt: AttemptRow; asset: AssetRow | null }>> {
+  const { getAll } = await import('./db');
+  const attempts = await getAll<AttemptRow>('attempts');
+  attempts.sort((a, b) => b.created_at - a.created_at);
+  const recent = attempts.slice(0, limit);
+  const assets = await getAll<AssetRow>('assets');
+  const byAttempt = new Map(assets.map((a) => [a.note_attempt_id, a]));
+  return recent.map((attempt) => ({
+    attempt,
+    asset: byAttempt.get(attempt.note_attempt_id) ?? null,
+  }));
+}
+
 export async function listSessionData(sessionId: string): Promise<{
   attempts: AttemptRow[];
   events: EventRow[];

@@ -223,6 +223,18 @@ h1 {
   font-size: 0.85rem;
   line-height: 1.5;
 }
+.diag-row {
+  border-top: 1px solid #e4ebf5;
+  padding: 10px 0;
+  font-size: 0.9rem;
+}
+.diag-crop {
+  display: block;
+  max-width: 100%;
+  margin-top: 6px;
+  border: 2px solid #cdd9ea;
+  border-radius: 8px;
+}
 .session-pick {
   display: grid;
   gap: 14px;

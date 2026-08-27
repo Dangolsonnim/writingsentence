@@ -17,6 +17,7 @@ import {
   GATE_PASS_THRESHOLD,
   OCR_SERVICE,
   deriveParticipantId,
+  listRecentAttempts,
   logEvent,
   newId,
   saveAsset,
@@ -450,6 +451,18 @@ async function handleCapture(
     });
 
     await recordCapture(result, passedBefore, escapeActiveByWord);
+    // 진단용 콘솔 출력 (chrome://inspect 원격 디버깅에서 확인 가능)
+    console.table(
+      result.slots.map((sr) => ({
+        낱말: template.note_slots[sr.slotIndex].target_word,
+        판정: sr.status,
+        게이트등급: sr.gateGrade,
+        게이트점수: sr.gateScore?.toFixed(3),
+        공백점수: sr.blank?.blankScore.toFixed(2),
+        M: sr.verify?.margin.toFixed(3),
+        자유복호: sr.verify?.freeText,
+      }))
+    );
     hideOverlay();
 
     if (staticMode && result.homography) {
@@ -823,7 +836,9 @@ async function renderSettings(): Promise<void> {
         <b>도구</b>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <a class="big-btn ghost" href="#print" style="width:auto;padding:10px 16px;font-size:1rem">학습지 인쇄</a>
+          <button class="big-btn ghost" id="btn-diag" style="width:auto;padding:10px 16px;font-size:1rem">최근 판정 진단</button>
         </div>
+        <div id="diag-area"></div>
         <p class="muted">앱 버전 ${APP_VERSION} · 게이트 ${GATE_MODEL_VERSION} · OCR crnn(jamo_no_null)</p>
       </div>
       <button class="big-btn ghost" id="btn-close">닫기</button>
@@ -860,6 +875,36 @@ async function renderSettings(): Promise<void> {
       },
     });
     window.alert('저장했습니다.');
+  });
+  el.querySelector('#btn-diag')!.addEventListener('click', async () => {
+    const area = el.querySelector('#diag-area')!;
+    area.innerHTML = '<p class="muted">불러오는 중…</p>';
+    const rows = await listRecentAttempts(12);
+    if (rows.length === 0) {
+      area.innerHTML = '<p class="muted">기록이 없습니다.</p>';
+      return;
+    }
+    const fmt = (v: number | null | undefined, d = 3) => (v === null || v === undefined ? '—' : v.toFixed(d));
+    area.innerHTML = rows
+      .map(({ attempt: a, asset }) => {
+        const img = asset ? `<img class="diag-crop" alt="크롭" data-asset="${asset.file_asset_id}" />` : '<span class="muted">(크롭 없음)</span>';
+        return `<div class="diag-row">
+          <div><b>${a.target_word}</b> · 촬영 ${a.retry_index + 1}회차 · <b>${a.judge_status}</b></div>
+          <div class="muted">게이트 등급 ${a.gate_grade ?? '—'} (점수 ${fmt(a.gate_score)}, 임계 ${a.gate_pass_threshold})
+            · 공백점수 ${fmt(a.blank_score, 2)} · 잉크비 ${fmt(a.ink_ratio, 4)}<br/>
+            검증 M ${fmt(a.verify_margin)} (${a.verify_decision ?? '—'}, τ ${a.verify_tau1 ?? '—'}/${a.verify_tau2 ?? '—'})
+            · 자유복호 '${a.ocr_raw_text ?? ''}' · 추정 '${a.estimated_written ?? ''}'<br/>
+            안내: ${a.feedback_message ?? ''}</div>
+          ${img}
+        </div>`;
+      })
+      .join('');
+    // 크롭 blob → 이미지 표시
+    for (const { asset } of rows) {
+      if (!asset) continue;
+      const imgEl = area.querySelector(`img[data-asset="${asset.file_asset_id}"]`) as HTMLImageElement | null;
+      if (imgEl) imgEl.src = URL.createObjectURL(asset.blob);
+    }
   });
   el.querySelector('#btn-retry')!.addEventListener('click', () => void processUploadQueue());
   el.querySelector('#btn-download')!.addEventListener('click', async () => {
