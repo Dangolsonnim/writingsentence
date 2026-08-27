@@ -1,4 +1,4 @@
 project_id = "dictweb"
 
-[functions.classroom-upload]
+[functions.dictweb-upload]
 verify_jwt = false

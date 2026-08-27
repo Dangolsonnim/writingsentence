@@ -7,14 +7,16 @@
 - **연구 설계(2026-08-28 사용자 확정)**: 비교실험 없이 **단일집단 사전-사후 + 학생 설문**으로
   분석한다. class_group A/B 임계 차등은 margin 모드 판정에 반영되지 않으며(게이트 모드
   전용), 처치 차등 비교는 설계에서 제외됨.
-- **업로드 백엔드(2026-08-28 사용자 확정)**: 받아쓰기 전용 신규 Supabase 프로젝트
-  `dictweb-db`(qcinrmumljbdsyiubwtr) — 로봇 배포1·배포2 프로젝트와 완전 분리.
-  업로드 토큰은 자동 업로드를 위해 **앱에 하드코딩**(사용자 확정): 이 프로젝트 전용
-  신규 발급 토큰이라 공개돼도 로봇 백엔드와 무관, 스팸 발생 시 토큰만 회전.
-  자격정보: `배포2_준비/supabase_dictweb_자격정보.md`(비공개 드라이브).
-  엣지 함수 classroom-upload(웹 저장소 supabase/functions/ 단일 소스, CORS 포함)가
-  zip을 Storage에 보존하고 dictationAttempts를 research_dictation_attempts(43컬럼)로
-  정형 적재. 업로드 E2E 검증 완료(테스트 참가자 dict-NEWDB-*).
+- **업로드 백엔드(최종, 2026-08-28 사용자 확정)**: 기존 프로젝트 **PhD**
+  (wdjovodhalidiqhlojvj) 내부에 저장하되(신규 프로젝트는 과금 문제로 미사용·삭제)
+  로봇 앱과 4중 분리 — 전용 함수 `dictweb-upload` / 전용 테이블 `dictweb_*` 6종 /
+  전용 버킷 `dictweb-session-packages` / 전용 토큰(신규 발급). 로봇의
+  classroom-upload·research_*·research-session-packages와 무접촉(교차 검증 완료).
+  토큰·URL은 자동 업로드를 위해 **앱에 하드코딩**(사용자 확정) — 받아쓰기 전용 토큰이라
+  공개돼도 로봇 백엔드와 무관, 스팸 발생 시 이 토큰만 회전. 함수·스키마는 웹 저장소
+  `supabase/` 단일 소스(CORS 포함), 자격정보는 `배포2_준비/supabase_dictweb_자격정보.md`.
+  E2E 검증: 설정 없는 기본값만으로 세션 종료 → zip+크롭 Storage 보존 +
+  dictweb_attempts(검증 지표 43컬럼) 정형 적재 확인.
 
 - 학생이 학습지 4칸을 **모두 쓴 뒤 전체를 1회 촬영** → 4칸 일괄 판정. (문항별 촬영 폐지)
 - **판정 모드 margin (기본, 2026-08-28 사용자 확정 — 게이트를 판정에서 제외)**:

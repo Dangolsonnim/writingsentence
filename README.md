@@ -52,10 +52,11 @@ npm test           # 골든 76 + OCR 동등성 + 게이트 스모크 + 판정 �
 
 - **교사 설정**: 시작 화면 우상단 ⚙️ → PIN(기본 `7391`, 코드 상수 `DEFAULT_PIN`) →
   class_group A(임계4)/B(임계3), 업로드 URL·토큰, 패키지 큐. 차시 진행 중 변경 불가.
-- **업로드**: 받아쓰기 전용 Supabase 프로젝트(dictweb-db)로 자동 업로드 — URL·토큰이
-  앱에 내장되어 별도 설정 없이 세션 종료 시 전송된다(오프라인이면 큐 보존 후 재시도).
-  함수·스키마는 `supabase/` 디렉터리가 단일 소스(`supabase functions deploy
-  classroom-upload --project-ref qcinrmumljbdsyiubwtr --no-verify-jwt`).
+- **업로드**: 기존 Supabase 프로젝트 PhD(wdjovodhalidiqhlojvj)의 받아쓰기 전용 함수
+  `dictweb-upload`로 자동 업로드 — URL·토큰이 앱에 내장되어 별도 설정 없이 세션 종료 시
+  전송된다(오프라인이면 큐 보존 후 재시도). 로봇 앱 데이터와는 전용 dictweb_* 테이블·
+  전용 버킷·전용 토큰으로 분리. 함수·스키마는 `supabase/` 디렉터리가 단일 소스
+  (`supabase functions deploy dictweb-upload --project-ref wdjovodhalidiqhlojvj --no-verify-jwt`).
 - **학습지 인쇄**: 설정 → 학습지 인쇄(`#print`) 또는 `scripts/make_worksheets.py` PDF.
   여백 없음·배율 100%로 인쇄해야 마커 35mm가 유지된다.
 - **OCR 모델 교체**: `public/models/crnn.onnx` 파일 교체(경로 고정). 도메인 평가 결과에 따라

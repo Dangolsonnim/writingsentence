@@ -41,11 +41,12 @@ export async function getUploadConfig(): Promise<UploadConfig> {
   const row = await get<{ key: string; value: UploadConfig }>('settings', SETTINGS_KEY);
   return (
     row?.value ?? {
-      // 받아쓰기 웹앱 전용 Supabase 프로젝트(dictweb-db, 2026-08-28 사용자 확정 —
-      // 로봇 앱 배포1·배포2 DB와 완전 분리). 토큰은 자동 업로드를 위해 하드코딩(사용자
-      // 확정) — 이 프로젝트 전용 신규 발급 토큰이라 유출돼도 로봇 백엔드와 무관하며,
-      // 문제 시 이 토큰만 회전하면 된다(자격정보 문서 참고).
-      functionUrl: 'https://qcinrmumljbdsyiubwtr.supabase.co/functions/v1/classroom-upload',
+      // 기존 프로젝트(phD, wdjovodhalidiqhlojvj) 안의 받아쓰기 전용 함수(2026-08-28
+      // 사용자 확정 — 신규 프로젝트는 과금 문제로 미사용). 로봇 앱과는 전용 함수·
+      // dictweb_* 테이블·전용 버킷·전용 토큰으로 완전 분리된다. 토큰은 자동 업로드를
+      // 위해 하드코딩(사용자 확정) — 받아쓰기 전용 신규 발급 토큰이라 유출돼도 로봇
+      // 백엔드(classroom-upload)와 무관하며, 문제 시 이 토큰만 회전하면 된다.
+      functionUrl: 'https://wdjovodhalidiqhlojvj.supabase.co/functions/v1/dictweb-upload',
       token: 'KDNJAdCsnXghEWW4iIAX7qWHUUSlL3VYh6ly0Kkq',
     }
   );
