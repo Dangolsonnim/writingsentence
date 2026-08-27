@@ -111,6 +111,7 @@ export interface AttemptRow {
   verify_tau2: number | null;
   verify_lambda: number | null; // 읽기 신뢰도 절대 임계
   verify_free_conf: number | null; // 자유 복호 방출 토큰 신뢰도(geomean)
+  verify_completeness: number | null; // 판독 완전성 C(자유 판독 자모수/정답 자모수)
   verify_best_margin: number | null; // 최고 1-자모 이웃 여유도
   judge_mode: string | null; // margin | gate
   estimated_written: string | null; // 오답 확정 시 1-자모 이웃 추정 낱말

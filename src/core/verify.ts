@@ -20,6 +20,13 @@ export const VERIFY_TAU1_DEFAULT = 0.25;
 export const VERIFY_TAU2_DEFAULT = 0.45;
 /** 읽기 신뢰도(방출 토큰 geomean) 절대 임계 — 실측: 낙서 ≤0.26, 정상 글씨 ≥0.48 */
 export const VERIFY_LAMBDA_DEFAULT = 0.35;
+/**
+ * 판독 완전성 C = 자유 판독 자모 수 / 정답 자모 수 최소값.
+ * 날려 쓴 글씨는 일부 글자만 자신 있게 읽혀('나무'→'나') conf·M을 통과하는 구멍을 막는다.
+ * 실측: 날려쓴 실패 0.50~0.67 / 정자 1.00 / 성인 골든 36 중 33건 ≥0.78
+ * (골든 3건은 모델이 실제로 절반만 읽은 크롭 — 재촬영 안내로 전환되는 트레이드오프).
+ */
+export const VERIFY_COMPLETENESS_MIN = 0.75;
 
 export type VerifyDecision = 'correct' | 'unclear' | 'wrong' | 'illegible';
 
@@ -34,6 +41,8 @@ export interface VerifyResult {
   freeText: string;
   /** 자유 복호 방출 토큰 신뢰도 geomean — 절대적 읽기 신뢰도(낙서 차단) */
   freeConf: number;
+  /** 판독 완전성 C = 자유 판독 자모 수 / 정답 자모 수 (부분 판독 차단) */
+  completeness: number;
   /** 오답 확정 시: 최고 점수 1-자모 이웃(학생이 쓴 것으로 추정)과 대조기 결과 */
   estimatedWritten: string | null;
   /** 최고 이웃의 여유도 (free−bestNeighborForced)/T — 판독 가능 오답 vs 판독 불가 구분 */
@@ -233,6 +242,20 @@ function composeTokens(tokens: JamoToken[], composer: HangulComposer): string {
   return composer.compose(tokens.map((t) => t.name));
 }
 
+/** 한글 자모 수 (완성형 2~3, 호환 자모 1, 그 외 문자 무시) */
+export function jamoLength(text: string): number {
+  let n = 0;
+  for (const ch of text) {
+    const o = ch.codePointAt(0)!;
+    if (o >= 0xac00 && o <= 0xd7a3) {
+      n += 2 + ((o - 0xac00) % 28 !== 0 ? 1 : 0);
+    } else if (o >= 0x3131 && o <= 0x3163) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
 function greedyText(
   lp: Float64Array,
   frames: number,
@@ -333,6 +356,7 @@ export class SpellVerifier {
     const margin = (free - forced) / frames;
     const freeText = greedyText(lp, frames, classes, this.tokenizer, this.composer);
     const freeConf = this.freeConfidence(lp, frames, classes);
+    const completeness = jamoLength(freeText) / Math.max(1, jamoLength(targetWord));
 
     const result: VerifyResult = {
       margin,
@@ -343,6 +367,7 @@ export class SpellVerifier {
       frames,
       freeText,
       freeConf,
+      completeness,
       estimatedWritten: null,
       bestNeighborMargin: null,
       jamo: null,
@@ -351,6 +376,12 @@ export class SpellVerifier {
 
     // 절대적 읽기 신뢰도: 낙서/판독 불가 글씨 차단 (M은 상대 여유도라 낙서에서 무력)
     if (freeConf < lambda) {
+      result.decision = 'illegible';
+      result.message = '글자를 읽기 어려워요. 더 크고 반듯하게 써 볼까요?';
+      return result;
+    }
+    // 판독 완전성: 일부 글자만 읽힌 날려쓴 글씨 차단 ('나무'→'나' 등 — conf·M 우회 구멍)
+    if (completeness < VERIFY_COMPLETENESS_MIN) {
       result.decision = 'illegible';
       result.message = '글자를 읽기 어려워요. 더 크고 반듯하게 써 볼까요?';
       return result;

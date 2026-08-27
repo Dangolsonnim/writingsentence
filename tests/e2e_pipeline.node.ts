@@ -115,6 +115,17 @@ async function main(): Promise<void> {
     check('글씨체 안내 문구', (s0.verify?.message ?? '').includes('반듯'));
   }
 
+  console.log('[margin] 부분 판독(날려쓴 글씨 시뮬: 나 vs 나무) → 완전성 차단 illegible:');
+  {
+    const r = await judgeSheet(loadPng(join(syn, 'p_partial.png')), engines, opts());
+    const s0 = r.slots[0];
+    console.log(
+      `  slot0=${s0.status} conf=${s0.verify?.freeConf.toFixed(2)} C=${s0.verify?.completeness.toFixed(2)} M=${s0.verify?.margin.toFixed(3)} free='${s0.verify?.freeText}'`
+    );
+    check('완전성 C < 0.75 → illegible', s0.status === 'illegible' && (s0.verify?.completeness ?? 1) < 0.75);
+    check('글씨체 안내 문구', (s0.verify?.message ?? '').includes('반듯'));
+  }
+
   console.log('[margin] 판독 가능한 큰 오류(실물 로봇 명령 vs 나무) → 처음부터 문구:');
   {
     const r = await judgeSheet(loadPng(join(syn, 'p_real.png')), engines, opts());

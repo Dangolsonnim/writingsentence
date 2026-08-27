@@ -705,6 +705,7 @@ async function recordCapture(
       verify_tau2: sr.verify?.tau2 ?? null,
       verify_lambda: sr.verify?.lambda ?? null,
       verify_free_conf: sr.verify?.freeConf ?? null,
+      verify_completeness: sr.verify?.completeness ?? null,
       verify_best_margin: sr.verify?.bestNeighborMargin ?? null,
       judge_mode: state.judgeMode,
       estimated_written: sr.verify?.estimatedWritten ?? null,
